@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400" viewBox="0 0 400 400">
+  <rect width="400" height="400" fill="#F3E3CC"/>
+  <circle cx="200" cy="160" r="80" fill="#D9A756" opacity="0.25"/>
+  <rect x="140" y="120" width="120" height="80" rx="8" fill="#6A3A1E" opacity="0.15"/>
+  <rect x="160" y="140" width="80" height="40" rx="4" fill="#6A3A1E" opacity="0.25"/>
+  <line x1="170" y1="155" x2="230" y2="155" stroke="#6A3A1E" stroke-width="3" opacity="0.4"/>
+  <line x1="180" y1="168" x2="220" y2="168" stroke="#6A3A1E" stroke-width="2" opacity="0.3"/>
+  <text x="200" y="280" text-anchor="middle" font-family="Georgia, serif" font-size="16" fill="#6A3A1E" opacity="0.6">Category Image</text>
+  <text x="200" y="305" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="#6A3A1E" opacity="0.4">Coming Soon</text>
+</svg>

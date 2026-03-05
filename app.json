@@ -1,0 +1,31 @@
+{
+  "expo": {
+    "name": "Brooklin Pub",
+    "slug": "brooklin-pub",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/brooklinpub-logo.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/brooklinpub-logo.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#FDF8F3"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.brooklinpub.app"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#FDF8F3",
+        "foregroundImage": "./assets/brooklinpub-logo.png"
+      },
+      "package": "com.brooklinpub.app",
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "favicon": "./assets/brooklinpub-logo.png"
+    },
+    "plugins": ["expo-font", "expo-web-browser"]
+  }
+}
