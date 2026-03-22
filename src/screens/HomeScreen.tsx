@@ -10,6 +10,7 @@ import {
   Text,
   StyleSheet,
   ScrollView,
+  FlatList,
   Dimensions,
   TouchableOpacity,
   Linking,
@@ -17,6 +18,7 @@ import {
   ImageBackground,
   Animated,
   Easing,
+  RefreshControl,
 } from "react-native";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
@@ -45,11 +47,12 @@ import {
   GlassCard,
   CornerAccents,
   InfoChip,
-} from "../components/common/SharedComponents";
+} from "../components/common";
 import ImageCard from "../components/common/ImageCard";
-import FloatingCallButton from "../components/common/FloatingCallButton";
-import Footer from "../components/common/Footer";
-import LoadingScreen from "../components/common/LoadingScreen";
+import SocialFAB from "../components/common/SocialFAB";
+import AppBrandStrip from "../components/common/AppBrandStrip";
+import { EventCardSkeleton } from "../components/common/SkeletonLoader";
+import { useHaptics } from "../hooks/useHaptics";
 
 // Team images (matching frontend's hardcoded team data)
 import Team2 from "../assets/images/team/team-2.png";
@@ -586,6 +589,7 @@ const TeamZigzagCard = React.memo(
 
 export default function HomeScreen({ navigation }: any) {
   const insets = useSafeAreaInsets();
+  const { light, medium } = useHaptics();
   const [showSpecialsPopup, setShowSpecialsPopup] = useState(false);
   const [activeSpecialIndex, setActiveSpecialIndex] = useState(0);
   const [activeEventIndex, setActiveEventIndex] = useState(0);
@@ -641,6 +645,8 @@ export default function HomeScreen({ navigation }: any) {
     ]).start();
   }, []);
 
+  const [refreshing, setRefreshing] = useState(false);
+
   // Data fetching
   const { dailySpecials, loading: specialsLoading } = useVisibleSpecials();
   const { data: allSpecials } = useApiWithCache<Special[]>(
@@ -648,18 +654,24 @@ export default function HomeScreen({ navigation }: any) {
     () => specialsService.getActiveSpecials(),
   );
   const popupSpecials = (allSpecials ?? []).filter(shouldShowInPopup);
-  const { data: events, loading: eventsLoading } = useApiWithCache<Event[]>(
+  const { data: events, loading: eventsLoading, refetch: refetchEvents } = useApiWithCache<Event[]>(
     "upcoming-events",
     () => eventsService.getUpcomingEvents(),
   );
-  const { data: activeEvents } = useApiWithCache<Event[]>(
+  const { data: activeEvents, refetch: refetchActiveEvents } = useApiWithCache<Event[]>(
     "active-events-home",
     () => eventsService.getActiveEvents(),
   );
-  const { data: openStatus } = useApiWithCache<OpeningHoursStatus>(
+  const { data: openStatus, refetch: refetchStatus } = useApiWithCache<OpeningHoursStatus>(
     "opening-status",
     () => openingHoursService.getCurrentStatus(),
   );
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await Promise.allSettled([refetchEvents(), refetchActiveEvents(), refetchStatus()]);
+    setRefreshing(false);
+  }, [refetchEvents, refetchActiveEvents, refetchStatus]);
 
   // Displayable events for accordion (matching frontend: filter + sort + limit 5)
   const displayableEvents = useMemo((): Event[] => {
@@ -704,15 +716,21 @@ export default function HomeScreen({ navigation }: any) {
     };
   }, [showSpecialsPopup, popupSpecials.length]);
 
-  const isLoading = eventsLoading && specialsLoading;
-  if (isLoading) return <LoadingScreen />;
-
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
       <ScrollView
         style={styles.scrollView}
         showsVerticalScrollIndicator={false}
-        bounces={false}
+        bounces={true}
+        contentContainerStyle={{ paddingBottom: insets.bottom + 88 }}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={colors.secondary.main}
+            colors={[colors.secondary.main]}
+          />
+        }
       >
         {/* ══════════ LANDING HERO SECTION ══════════ */}
         <View style={styles.heroContainer}>
@@ -724,32 +742,12 @@ export default function HomeScreen({ navigation }: any) {
           />
           <LinearGradient
             colors={[
-              "rgba(74,44,23,0.65)",
-              "rgba(60,31,14,0.75)",
-              "rgba(74,44,23,0.7)",
+              "rgba(60,31,14,0.55)",
+              "rgba(60,31,14,0.72)",
+              "rgba(40,20,8,0.82)",
             ]}
             style={styles.heroGradient}
           >
-            {/* Animated floating particles */}
-            <View style={styles.particleContainer}>
-              {Array.from({ length: 12 }).map((_, i) => (
-                <AnimatedParticle
-                  key={i}
-                  delay={i * 300}
-                  style={[
-                    styles.particle,
-                    {
-                      left: `${8 + Math.random() * 84}%` as any,
-                      top: `${8 + Math.random() * 84}%` as any,
-                      width: 4 + (i % 3) * 2,
-                      height: 4 + (i % 3) * 2,
-                      backgroundColor: "rgba(217,167,86,0.4)",
-                    },
-                  ]}
-                />
-              ))}
-            </View>
-
             <Animated.View
               style={[
                 styles.heroContentWrapper,
@@ -779,350 +777,279 @@ export default function HomeScreen({ navigation }: any) {
                 welcome in town
               </Text>
 
-              {/* CTA Button */}
-              <TouchableOpacity
-                style={styles.heroCTAButton}
-                onPress={() => navigation.navigate("MenuTab")}
-                activeOpacity={0.85}
-              >
-                <LinearGradient
-                  colors={["#D9A756", "#B8923F"]}
-                  style={styles.heroCTAGradient}
-                >
-                  <Text style={styles.heroCTAText}>EXPLORE OUR MENU</Text>
-                </LinearGradient>
-              </TouchableOpacity>
-            </Animated.View>
-
-            {/* Scroll indicator */}
-            <ScrollIndicator />
-          </LinearGradient>
-        </View>
-
-        {/* ══════════ HERO MIDDLE SECTION ══════════ */}
-        <ImageBackground
-          source={require("../assets/images/hero-bg.jpg")}
-          style={styles.heroMiddleContainer}
-          resizeMode="cover"
-        >
-          <LinearGradient
-            colors={[
-              "rgba(26,13,10,0.9)",
-              "rgba(74,44,23,0.7)",
-              "rgba(26,13,10,0.9)",
-            ]}
-            style={styles.heroMiddleOverlay}
-          >
-            {/* Floating particles */}
-            <View style={styles.particleContainer}>
-              {Array.from({ length: 8 }).map((_, i) => (
-                <AnimatedParticle
-                  key={`mid-particle-${i}`}
-                  delay={i * 500}
-                  style={[
-                    styles.particle,
-                    {
-                      left: `${10 + Math.random() * 80}%` as any,
-                      top: `${10 + Math.random() * 80}%` as any,
-                      width: 4 + (i % 3) * 2,
-                      height: 4 + (i % 3) * 2,
-                      backgroundColor: "rgba(217,167,86,0.3)",
-                    },
-                  ]}
-                />
-              ))}
-            </View>
-
-            <View style={styles.heroMiddleContent}>
-              <Text style={styles.heroMiddleSubtitle}>◆ Est. 2014 ◆</Text>
-              <Text style={styles.heroMiddleTitle}>
-                A Local Favorite for{"\n"}
-                <Text style={{ color: colors.secondary.main }}>
-                  Over a Decade
-                </Text>
-              </Text>
-              <GoldDivider style={{ width: 100, marginVertical: spacing.md }} />
-              <Text style={styles.heroMiddleDesc}>
-                Experience the warmth of our classic pub atmosphere, where great
-                food, cold drinks, and unforgettable moments come together. A
-                place where neighbors become friends and every visit feels like
-                coming home.
-              </Text>
-              <View style={styles.heroMiddleButtons}>
+              {/* Dual CTA Row */}
+              <View style={styles.heroCTARow}>
                 <TouchableOpacity
-                  style={styles.heroMiddleBtn}
-                  onPress={() => navigation.navigate("MenuTab")}
+                  style={styles.heroCTAButton}
+                  onPress={() => { medium(); navigation.navigate("MenuTab"); }}
                   activeOpacity={0.85}
                 >
                   <LinearGradient
                     colors={["#D9A756", "#B8923F"]}
-                    style={styles.heroMiddleBtnGradient}
+                    style={styles.heroCTAGradient}
                   >
-                    <Text style={styles.heroMiddleBtnText}>Explore Menu</Text>
+                    <Text style={styles.heroCTAText}>OUR MENU</Text>
                   </LinearGradient>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  style={[styles.heroMiddleBtn, styles.heroMiddleBtnOutline]}
-                  onPress={() => navigation.navigate("AboutTab")}
+                  style={styles.heroCTAButtonOutline}
+                  onPress={() => { light(); navigation.navigate("SpecialTab"); }}
                   activeOpacity={0.85}
                 >
-                  <Text style={styles.heroMiddleBtnOutlineText}>Our Story</Text>
+                  <Text style={styles.heroCTATextOutline}>SPECIALS</Text>
                 </TouchableOpacity>
               </View>
-              <View style={styles.heroMiddleBottomAccent}>
-                <LinearGradient
-                  colors={["transparent", "rgba(217,167,86,0.5)"]}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 0 }}
-                  style={{ height: 1, flex: 1 }}
-                />
-                <Text style={styles.heroMiddleLocationText}>
-                  Brooklin, Ontario
-                </Text>
-                <LinearGradient
-                  colors={["rgba(217,167,86,0.5)", "transparent"]}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 0 }}
-                  style={{ height: 1, flex: 1 }}
-                />
-              </View>
-            </View>
-          </LinearGradient>
-        </ImageBackground>
+            </Animated.View>
 
-        {/* ══════════ UPCOMING EVENTS ACCORDION ══════════ */}
-        {displayableEvents.length > 0 && (
-          <View style={styles.eventsSection}>
-            {/* Floating accent elements */}
-            <View style={styles.floatingAccents}>
-              {Array.from({ length: 6 }).map((_, i) => (
-                <AnimatedParticle
-                  key={`event-particle-${i}`}
-                  delay={i * 400}
+          </LinearGradient>
+        </View>
+
+        {/* ══════════ QUICK INFO BAR ══════════ */}
+        <View style={styles.quickInfoBar}>
+          {openStatus !== undefined && (
+            <View style={styles.statusRow}>
+              <View
+                style={[
+                  styles.statusPill,
+                  {
+                    backgroundColor: openStatus?.isOpen
+                      ? "rgba(34,197,94,0.1)"
+                      : "rgba(239,68,68,0.1)",
+                    borderColor: openStatus?.isOpen
+                      ? "rgba(34,197,94,0.35)"
+                      : "rgba(239,68,68,0.35)",
+                  },
+                ]}
+              >
+                <View
                   style={[
-                    styles.floatingParticle,
+                    styles.statusDot,
                     {
-                      left: `${5 + ((i * 13) % 90)}%` as any,
-                      top: `${15 + ((i * 12) % 70)}%` as any,
-                      width: 6 + (i % 3) * 2,
-                      height: 6 + (i % 3) * 2,
+                      backgroundColor: openStatus?.isOpen
+                        ? "#22C55E"
+                        : "#EF4444",
                     },
                   ]}
                 />
-              ))}
-            </View>
-
-            {/* Header */}
-            <View style={styles.eventsSectionHeader}>
-              <GoldAccentLine width={80} />
-              <Text style={styles.eventsSectionOverline}>
-                ◆ What's Happening ◆
-              </Text>
-              <Text style={styles.eventsSectionTitle}>
-                Upcoming{" "}
-                <Text style={{ color: colors.secondary.main }}>Events</Text>
-              </Text>
-              <Text style={styles.eventsSectionSubtitle}>
-                Unforgettable experiences, live entertainment, and celebrations
-                that bring our community together
-              </Text>
-              <LinearGradient
-                colors={["transparent", "rgba(217,167,86,0.5)", "transparent"]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={styles.eventsSectionDivider}
-              />
-            </View>
-
-            {/* Accordion Cards */}
-            <View style={styles.accordionContainer}>
-              {displayableEvents.map((event, index) => (
-                <EventAccordionCard
-                  key={event.id}
-                  event={event}
-                  isActive={index === activeEventIndex}
-                  onPress={() => setActiveEventIndex(index)}
-                  onViewDetails={() => navigation.navigate("EventsTab")}
-                />
-              ))}
-            </View>
-          </View>
-        )}
-
-        {/* ══════════ TEAM ZIGZAG SECTION ══════════ */}
-        <View style={styles.teamSection}>
-          {/* Header */}
-          <View style={styles.teamHeader}>
-            <GoldAccentLine width={80} />
-            <Text style={styles.teamOverline}>
-              ◆ The Heart of Brooklin Pub ◆
-            </Text>
-            <Text style={styles.teamTitle}>
-              Meet Our{" "}
-              <Text style={{ color: colors.secondary.main }}>
-                Dedicated Team
-              </Text>
-            </Text>
-            <Text style={styles.teamSubtitle}>
-              The passionate people behind every exceptional meal, warm welcome,
-              and unforgettable moment at Brooklin Pub.
-            </Text>
-            <LinearGradient
-              colors={["transparent", "rgba(217,167,86,0.5)", "transparent"]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-              style={styles.teamDividerLine}
-            />
-          </View>
-
-          {/* Zigzag Cards */}
-          {TEAM_MEMBERS.map((member, index) => (
-            <TeamZigzagCard
-              key={member.id}
-              member={member}
-              index={index}
-              onPress={() => navigation.navigate("AboutTab")}
-            />
-          ))}
-
-          {/* Bottom decorative element */}
-          <View style={styles.teamBottomDecor}>
-            <LinearGradient
-              colors={["transparent", "rgba(217,167,86,0.5)"]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-              style={styles.teamBottomLine}
-            />
-            <View style={styles.teamBottomDiamond} />
-            <Text style={styles.teamBottomText}>
-              SERVING WITH PRIDE SINCE 2014
-            </Text>
-            <View style={styles.teamBottomDiamond} />
-            <LinearGradient
-              colors={["rgba(217,167,86,0.5)", "transparent"]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-              style={styles.teamBottomLine}
-            />
-          </View>
-        </View>
-
-        {/* ══════════ ORDER ONLINE CTA SECTION ══════════ */}
-        <View style={styles.orderSection}>
-          <LinearGradient
-            colors={[
-              "rgba(217,167,86,0.12)",
-              "rgba(217,167,86,0.05)",
-              "rgba(217,167,86,0.12)",
-            ]}
-            style={styles.orderGradient}
-          >
-            <Text style={styles.orderOverline}>HUNGRY?</Text>
-            <Text style={styles.orderTitle}>Order Online</Text>
-            <Text style={styles.orderDesc}>
-              Skip the wait and order your favorites for pickup or delivery
-            </Text>
-            <GoldButton
-              title="Order Now"
-              onPress={() => Linking.openURL(EXTERNAL_URLS.ORDER_ONLINE)}
-              icon={
-                <Ionicons
-                  name="restaurant-outline"
-                  size={18}
-                  color={colors.primary.dark}
-                />
-              }
-            />
-          </LinearGradient>
-        </View>
-
-        {/* ══════════ CONTACT QUICK INFO ══════════ */}
-        <View style={styles.quickContactSection}>
-          <SectionHeader title="Visit Us" subtitle="Come Say Hello" />
-          <View style={styles.quickContactGrid}>
-            <GlassCard style={styles.quickContactCard}>
-              <Ionicons
-                name="location-outline"
-                size={24}
-                color={colors.secondary.main}
-              />
-              <Text style={styles.quickContactLabel}>Address</Text>
-              <Text style={styles.quickContactValue}>
-                {CONTACT_INFO.ADDRESS.STREET}
-              </Text>
-              <Text style={styles.quickContactSub}>
-                {CONTACT_INFO.ADDRESS.CITY}, {CONTACT_INFO.ADDRESS.PROVINCE}
-              </Text>
-            </GlassCard>
-            <GlassCard style={styles.quickContactCard}>
-              <Ionicons
-                name="call-outline"
-                size={24}
-                color={colors.secondary.main}
-              />
-              <Text style={styles.quickContactLabel}>Phone</Text>
-              <TouchableOpacity
-                onPress={() => Linking.openURL(`tel:${CONTACT_INFO.PHONE_RAW}`)}
-              >
                 <Text
                   style={[
-                    styles.quickContactValue,
-                    { color: colors.secondary.main },
+                    styles.statusPillText,
+                    { color: openStatus?.isOpen ? "#22C55E" : "#EF4444" },
                   ]}
                 >
-                  {CONTACT_INFO.PHONE}
+                  {openStatus?.isOpen ? "Open Now" : "Closed"}
                 </Text>
-              </TouchableOpacity>
-              <Text style={styles.quickContactSub}>Tap to call</Text>
-            </GlassCard>
-          </View>
-
-          {openStatus && (
-            <View
-              style={[
-                styles.openStatusBanner,
-                {
-                  backgroundColor: openStatus.isOpen
-                    ? "rgba(34,197,94,0.1)"
-                    : "rgba(138,42,42,0.1)",
-                  borderColor: openStatus.isOpen
-                    ? "rgba(34,197,94,0.3)"
-                    : "rgba(138,42,42,0.3)",
-                },
-              ]}
-            >
-              <View
-                style={[
-                  styles.statusDot,
-                  {
-                    backgroundColor: openStatus.isOpen
-                      ? colors.success
-                      : colors.error,
-                  },
-                ]}
-              />
-              <Text
-                style={[
-                  styles.statusText,
-                  {
-                    color: openStatus.isOpen ? colors.success : colors.error,
-                  },
-                ]}
-              >
-                {openStatus.isOpen
-                  ? "We're Currently Open!"
-                  : "We're Currently Closed"}
+              </View>
+              <Text style={styles.statusAddress}>
+                15 Baldwin St · Whitby, ON
               </Text>
             </View>
           )}
+          <View style={styles.quickActions}>
+            {[
+              {
+                icon: "call" as const,
+                label: "Call",
+                onPress: () =>
+                  Linking.openURL(`tel:${CONTACT_INFO.PHONE_RAW}`),
+              },
+              {
+                icon: "navigate" as const,
+                label: "Directions",
+                onPress: () =>
+                  Linking.openURL(EXTERNAL_URLS.GOOGLE_MAPS),
+              },
+              {
+                icon: "bag-handle-outline" as const,
+                label: "Order",
+                onPress: () =>
+                  Linking.openURL(EXTERNAL_URLS.ORDER_ONLINE),
+              },
+              {
+                icon: "book-outline" as const,
+                label: "Menu",
+                onPress: () => navigation.navigate("MenuTab"),
+              },
+            ].map((action) => (
+              <TouchableOpacity
+                key={action.label}
+                style={styles.quickActionBtn}
+                onPress={action.onPress}
+                activeOpacity={0.75}
+              >
+                <View style={styles.quickActionIcon}>
+                  <Ionicons
+                    name={action.icon}
+                    size={22}
+                    color={colors.secondary.main}
+                  />
+                </View>
+                <Text style={styles.quickActionLabel}>{action.label}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
         </View>
 
-        {/* ══════════ FOOTER ══════════ */}
-        <Footer openStatus={openStatus} />
+        {/* ══════════ TODAY'S SPECIALS TEASER ══════════ */}
+        {(specialsLoading || dailySpecials.length > 0) && (
+          <View style={styles.specialsSection}>
+            <View style={styles.sectionRow}>
+              <Text style={styles.sectionLabel}>Today's Specials</Text>
+              <TouchableOpacity
+                onPress={() => navigation.navigate("SpecialTab")}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Text style={styles.sectionSeeAll}>See All →</Text>
+              </TouchableOpacity>
+            </View>
+
+            {specialsLoading ? (
+              <View style={styles.specialsTeaserRow}>
+                {[1, 2].map((i) => (
+                  <View key={i} style={styles.specialTeaserSkeleton} />
+                ))}
+              </View>
+            ) : (
+              <FlatList
+                horizontal
+                data={dailySpecials.slice(0, 6)}
+                keyExtractor={(item) => item.id}
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.specialsTeaserList}
+                ItemSeparatorComponent={() => <View style={{ width: spacing.md }} />}
+                renderItem={({ item }) => (
+                  <TouchableOpacity
+                    style={styles.specialTeaserCard}
+                    onPress={() => navigation.navigate("SpecialTab")}
+                    activeOpacity={0.85}
+                  >
+                    <Image
+                      source={{
+                        uri:
+                          getImageUrl(item.imageUrls?.[0]) ||
+                          "https://i.pinimg.com/736x/42/2c/2e/422c2e649799697f1d1355ba8f308edd.jpg",
+                      }}
+                      style={styles.specialTeaserImage}
+                      contentFit="cover"
+                      transition={300}
+                    />
+                    <LinearGradient
+                      colors={["transparent", "rgba(40,20,8,0.88)"]}
+                      style={StyleSheet.absoluteFillObject}
+                    />
+                    <View style={styles.specialTeaserInfo}>
+                      <Text style={styles.specialTeaserType}>
+                        {item.type === "daily"
+                          ? "Daily"
+                          : item.type === "day_time"
+                            ? "Day Time"
+                            : "Special"}
+                      </Text>
+                      <Text style={styles.specialTeaserTitle} numberOfLines={2}>
+                        {item.title}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                )}
+              />
+            )}
+          </View>
+        )}
+
+        {/* ══════════ UPCOMING EVENTS ACCORDION ══════════ */}
+        {(eventsLoading || displayableEvents.length > 0) && (
+          <View style={styles.eventsSection}>
+            {/* Header */}
+            <View style={styles.sectionRow}>
+              <Text style={styles.sectionLabel}>Upcoming Events</Text>
+              <TouchableOpacity
+                onPress={() => navigation.navigate("EventsTab")}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Text style={styles.sectionSeeAll}>See All →</Text>
+              </TouchableOpacity>
+            </View>
+
+            {eventsLoading ? (
+              /* Skeleton while events load */
+              <View style={{ gap: spacing.sm }}>
+                {[1, 2].map((i) => (
+                  <EventCardSkeleton key={i} />
+                ))}
+              </View>
+            ) : (
+              /* Accordion Cards */
+              <View style={styles.accordionContainer}>
+                {displayableEvents.map((event, index) => (
+                  <EventAccordionCard
+                    key={event.id}
+                    event={event}
+                    isActive={index === activeEventIndex}
+                    onPress={() => setActiveEventIndex(index)}
+                    onViewDetails={() => navigation.navigate("EventsTab")}
+                  />
+                ))}
+              </View>
+            )}
+          </View>
+        )}
+
+        {/* ══════════ TEAM HORIZONTAL STRIP ══════════ */}
+        <View style={styles.teamSection}>
+          <View style={styles.sectionRow}>
+            <Text style={styles.sectionLabel}>Meet The Team</Text>
+            <TouchableOpacity
+              onPress={() => navigation.navigate("AboutTab")}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Text style={styles.sectionSeeAll}>About Us →</Text>
+            </TouchableOpacity>
+          </View>
+          <FlatList
+            horizontal
+            data={TEAM_MEMBERS}
+            keyExtractor={(item) => item.id.toString()}
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.teamList}
+            renderItem={({ item }) => (
+              <TouchableOpacity
+                style={styles.teamCard}
+                onPress={() => navigation.navigate("AboutTab")}
+                activeOpacity={0.85}
+              >
+                <Image
+                  source={item.image}
+                  style={styles.teamCardImage}
+                  contentFit="cover"
+                  transition={300}
+                />
+                <LinearGradient
+                  colors={["transparent", "rgba(40,20,8,0.82)"]}
+                  style={styles.teamCardGradient}
+                />
+                <View style={styles.teamCardInfo}>
+                  <Text style={styles.teamCardRole} numberOfLines={1}>
+                    {item.role}
+                  </Text>
+                  <Text style={styles.teamCardName} numberOfLines={1}>
+                    {item.name}
+                  </Text>
+                  <Text style={styles.teamCardSpecialty} numberOfLines={2}>
+                    {item.specialty}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            )}
+          />
+        </View>
+
+
+        {/* ══════════ BRAND STRIP ══════════ */}
+        <AppBrandStrip />
       </ScrollView>
 
-      {/* ══════════ FLOATING CALL BUTTON ══════════ */}
-      <FloatingCallButton />
+      {/* ══════════ SOCIAL FAB ══════════ */}
+      <SocialFAB />
 
       {/* ══════════ SPECIALS POPUP MODAL ══════════ */}
       <Modal
@@ -1239,10 +1166,208 @@ const styles = StyleSheet.create({
     flex: 1,
   },
 
+  /* ──── Quick Info Bar ──── */
+  quickInfoBar: {
+    backgroundColor: "#FFFFFF",
+    marginHorizontal: spacing.base,
+    marginTop: -24,
+    borderRadius: 20,
+    paddingHorizontal: spacing.base,
+    paddingTop: spacing.lg,
+    paddingBottom: spacing.xl,
+    borderWidth: 1,
+    borderColor: "rgba(217,167,86,0.18)",
+    shadowColor: "#3C1F0E",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.14,
+    shadowRadius: 20,
+    elevation: 10,
+    zIndex: 10,
+  },
+  statusRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+    marginBottom: spacing.lg,
+  },
+  statusPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 5,
+    borderRadius: 20,
+    borderWidth: 1,
+  },
+  statusDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+  },
+  statusPillText: {
+    fontFamily: typography.fontFamily.bodyBold,
+    fontSize: 12,
+    letterSpacing: 0.3,
+  },
+  statusAddress: {
+    fontFamily: typography.fontFamily.body,
+    fontSize: typography.fontSize.sm,
+    color: colors.text.muted,
+  },
+  quickActions: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
+  quickActionBtn: {
+    flex: 1,
+    alignItems: "center",
+    gap: 6,
+  },
+  quickActionIcon: {
+    width: 52,
+    height: 52,
+    borderRadius: 16,
+    backgroundColor: "rgba(217,167,86,0.1)",
+    borderWidth: 1,
+    borderColor: "rgba(217,167,86,0.25)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  quickActionLabel: {
+    fontFamily: typography.fontFamily.bodyMedium,
+    fontSize: 11,
+    color: colors.text.secondary,
+    letterSpacing: 0.2,
+  },
+
+  /* ──── Section Row ──── */
+  sectionRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: spacing.base,
+    marginBottom: spacing.md,
+  },
+  sectionLabel: {
+    fontFamily: typography.fontFamily.heading,
+    fontSize: typography.fontSize.lg,
+    color: colors.text.primary,
+    letterSpacing: -0.2,
+  },
+  sectionSeeAll: {
+    fontFamily: typography.fontFamily.bodyMedium,
+    fontSize: typography.fontSize.sm,
+    color: colors.secondary.main,
+  },
+
+  /* ──── Today's Specials Teaser ──── */
+  specialsSection: {
+    paddingTop: spacing["2xl"],
+    paddingBottom: spacing.xl,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(217,167,86,0.1)",
+  },
+  specialsTeaserList: {
+    paddingHorizontal: spacing.base,
+  },
+  specialsTeaserRow: {
+    flexDirection: "row",
+    paddingHorizontal: spacing.base,
+    gap: spacing.md,
+  },
+  specialTeaserCard: {
+    width: 160,
+    height: 200,
+    borderRadius: 16,
+    overflow: "hidden",
+    position: "relative",
+    ...shadows.md,
+  },
+  specialTeaserSkeleton: {
+    width: 160,
+    height: 200,
+    borderRadius: 16,
+    backgroundColor: "rgba(217,167,86,0.1)",
+  },
+  specialTeaserImage: {
+    width: "100%",
+    height: "100%",
+  },
+  specialTeaserInfo: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    padding: spacing.sm,
+  },
+  specialTeaserType: {
+    fontFamily: typography.fontFamily.bodySemibold,
+    fontSize: 9,
+    color: colors.secondary.main,
+    letterSpacing: 1.5,
+    textTransform: "uppercase",
+    marginBottom: 3,
+  },
+  specialTeaserTitle: {
+    fontFamily: typography.fontFamily.heading,
+    fontSize: typography.fontSize.sm,
+    color: "#FFFDFB",
+    lineHeight: 16,
+  },
+
+  /* ──── Team Horizontal Strip ──── */
+  teamList: {
+    paddingHorizontal: spacing.base,
+    gap: spacing.md,
+  },
+  teamCard: {
+    width: 150,
+    height: 190,
+    borderRadius: 16,
+    overflow: "hidden",
+    position: "relative",
+    ...shadows.md,
+  },
+  teamCardImage: {
+    width: "100%",
+    height: "100%",
+  },
+  teamCardGradient: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  teamCardInfo: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    padding: spacing.sm,
+  },
+  teamCardRole: {
+    fontFamily: typography.fontFamily.bodySemibold,
+    fontSize: 9,
+    color: colors.secondary.main,
+    letterSpacing: 1.5,
+    textTransform: "uppercase",
+    marginBottom: 2,
+  },
+  teamCardName: {
+    fontFamily: typography.fontFamily.heading,
+    fontSize: typography.fontSize.sm,
+    color: "#FFFDFB",
+    lineHeight: 16,
+  },
+  teamCardSpecialty: {
+    fontFamily: typography.fontFamily.body,
+    fontSize: 9,
+    color: "rgba(255,253,251,0.7)",
+    lineHeight: 12,
+    marginTop: 2,
+  },
+
   /* ──── Landing Hero ──── */
   heroContainer: {
     width: SCREEN_WIDTH,
-    height: SCREEN_HEIGHT,
+    height: SCREEN_HEIGHT * 0.6,
   },
   heroGradient: {
     flex: 1,
@@ -1332,14 +1457,19 @@ const styles = StyleSheet.create({
     textShadowOffset: { width: 0, height: 2 },
     textShadowRadius: 10,
   },
-  heroCTAButton: {
+  heroCTARow: {
+    flexDirection: "row",
+    gap: spacing.md,
     marginTop: spacing.xl,
+    alignItems: "center",
+  },
+  heroCTAButton: {
     borderRadius: 50,
     overflow: "hidden",
     ...shadows.gold,
   },
   heroCTAGradient: {
-    paddingHorizontal: Math.max(24, SCREEN_WIDTH * 0.08),
+    paddingHorizontal: Math.max(20, SCREEN_WIDTH * 0.065),
     paddingVertical: spacing.md + 2,
     borderRadius: 50,
     borderWidth: 2,
@@ -1349,6 +1479,20 @@ const styles = StyleSheet.create({
     fontFamily: typography.fontFamily.bodySemibold,
     fontSize: typography.fontSize.sm,
     color: "#FFFDFB",
+    letterSpacing: 2,
+    textTransform: "uppercase",
+  },
+  heroCTAButtonOutline: {
+    borderRadius: 50,
+    borderWidth: 1.5,
+    borderColor: "rgba(217,167,86,0.7)",
+    paddingHorizontal: Math.max(20, SCREEN_WIDTH * 0.065),
+    paddingVertical: spacing.md + 2,
+  },
+  heroCTATextOutline: {
+    fontFamily: typography.fontFamily.bodySemibold,
+    fontSize: typography.fontSize.sm,
+    color: "#D9A756",
     letterSpacing: 2,
     textTransform: "uppercase",
   },
@@ -1473,10 +1617,9 @@ const styles = StyleSheet.create({
 
   /* ──── Events Accordion Section ──── */
   eventsSection: {
-    paddingVertical: spacing["3xl"],
+    paddingTop: spacing["2xl"],
+    paddingBottom: spacing.xl,
     backgroundColor: colors.background.default,
-    position: "relative",
-    overflow: "hidden",
   },
   floatingAccents: {
     ...StyleSheet.absoluteFillObject,
@@ -1668,9 +1811,10 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
   },
 
-  /* ──── Team Zigzag Section ──── */
+  /* ──── Team Horizontal Strip ──── */
   teamSection: {
-    paddingVertical: spacing["3xl"],
+    paddingTop: spacing["2xl"],
+    paddingBottom: spacing.xl,
     backgroundColor: colors.background.default,
   },
   teamHeader: {

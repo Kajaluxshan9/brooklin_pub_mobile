@@ -27,7 +27,7 @@ export const menuService = {
     primaryCategoryId: string,
   ): Promise<MenuCategory[]> {
     return api.get<MenuCategory[]>(
-      `/menu/categories?primaryCategoryId=${primaryCategoryId}`,
+      `/menu/primary-categories/${primaryCategoryId}/categories`,
     );
   },
 
@@ -45,7 +45,7 @@ export const menuService = {
     primaryCategoryId: string,
   ): Promise<MenuItem[]> {
     return api.get<MenuItem[]>(
-      `/menu/items?primaryCategoryId=${primaryCategoryId}`,
+      `/menu/primary-categories/${primaryCategoryId}/items`,
     );
   },
 

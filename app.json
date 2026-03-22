@@ -26,6 +26,15 @@
     "web": {
       "favicon": "./assets/brooklinpub-logo.png"
     },
-    "plugins": ["expo-font", "expo-web-browser"]
+    "plugins": [
+      "expo-font",
+      "expo-web-browser"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "d586045d-f51f-42ce-a2c2-2d71b002cb0d"
+      }
+    },
+    "owner": "subathran"
   }
 }

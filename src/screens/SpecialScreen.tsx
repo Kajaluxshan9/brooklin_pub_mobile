@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from "react";
+import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   Modal,
   ScrollView,
   Animated,
+  RefreshControl,
 } from "react-native";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
@@ -26,21 +27,19 @@ import { specialsService } from "../services/specials.service";
 import { getImageUrl } from "../services/api";
 import type { Special } from "../types/api.types";
 import {
-  SectionHeader,
   GoldDivider,
   CornerAccents,
   ErrorView,
-  AnimatedBackground,
-} from "../components/common/SharedComponents";
-import HeroSection from "../components/common/HeroSection";
-import Footer from "../components/common/Footer";
-import FloatingCallButton from "../components/common/FloatingCallButton";
-import LoadingScreen from "../components/common/LoadingScreen";
+} from "../components/common";
+import PageHeader from "../components/common/PageHeader";
+import SocialFAB from "../components/common/SocialFAB";
+import { SpecialCardSkeleton } from "../components/common/SkeletonLoader";
+import { useShare } from "../hooks/useShare";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 
-const CARD_WIDTH = SCREEN_WIDTH * 0.72;
-const CARD_HEIGHT = CARD_WIDTH * 1.15;
+const CARD_WIDTH = SCREEN_WIDTH * 0.82;
+const CARD_HEIGHT = CARD_WIDTH * 1.28;
 const CARD_GAP = spacing.md;
 
 // ─── Filter helpers ──────────────────────────────────────────────────────────
@@ -65,9 +64,15 @@ const filterOtherSpecials = (specials: Special[]) =>
 // ═══════════════════════════════════════════════════════════════════
 export default function SpecialScreen({ route, navigation }: any) {
   const insets = useSafeAreaInsets();
-  const specialType = route?.params?.type ?? "daily";
+  // localType allows toggling between daily/other from the Specials tab
+  const [localType, setLocalType] = useState<"daily" | "other">(
+    route?.params?.type ?? "daily",
+  );
+  const specialType = localType;
   const [selectedSpecial, setSelectedSpecial] = useState<Special | null>(null);
   const [activeIndex, setActiveIndex] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
+  const { shareSpecial } = useShare();
   const flatListRef = useRef<FlatList>(null);
   const scrollX = useRef(new Animated.Value(0)).current;
 
@@ -80,6 +85,12 @@ export default function SpecialScreen({ route, navigation }: any) {
     specialsService.getActiveSpecials(),
   );
 
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await refetch();
+    setRefreshing(false);
+  }, [refetch]);
+
   // Filter based on type
   const specials = useMemo(() => {
     if (!specialsData || specialsData.length === 0) return [];
@@ -87,6 +98,12 @@ export default function SpecialScreen({ route, navigation }: any) {
     if (t === "other") return filterOtherSpecials(specialsData);
     return filterDailySpecials(specialsData);
   }, [specialsData, specialType]);
+
+  // Reset carousel when type toggle changes
+  useEffect(() => {
+    setActiveIndex(0);
+    flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
+  }, [localType]);
 
   // Auto-scroll carousel
   useEffect(() => {
@@ -127,32 +144,57 @@ export default function SpecialScreen({ route, navigation }: any) {
   const title = getTitle();
   const subtitle = getSubtitle();
 
-  if (loading) return <LoadingScreen />;
   if (error) return <ErrorView message={error} onRetry={refetch} />;
 
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
-      {/* Back button */}
-      <TouchableOpacity
-        style={[styles.backButton, { top: insets.top + spacing.sm }]}
-        onPress={() => navigation.goBack()}
-        activeOpacity={0.7}
-      >
-        <Ionicons name="arrow-back" size={22} color={colors.primary.dark} />
-      </TouchableOpacity>
 
-      <ScrollView showsVerticalScrollIndicator={false} bounces={false}>
-        {/* Hero */}
-        <HeroSection
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        bounces={true}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={colors.secondary.main}
+            colors={[colors.secondary.main]}
+          />
+        }
+        contentContainerStyle={{ paddingBottom: insets.bottom + 88 }}
+      >
+        {/* Page header */}
+        <PageHeader
           title={title}
-          overlineText="✦ LIMITED TIME OFFERS ✦"
           subtitle={subtitle}
-          variant="light"
-          height={260}
+          icon="flame-outline"
         />
 
-        {/* ════ Carousel Section ════ */}
-        {specials.length === 0 ? (
+        {/* Daily / Other toggle */}
+        <View style={styles.typeToggleRow}>
+          {(["daily", "other"] as const).map((t) => {
+            const isActive = localType === t;
+            return (
+              <TouchableOpacity
+                key={t}
+                style={[styles.typeToggleBtn, isActive && styles.typeToggleBtnActive]}
+                onPress={() => setLocalType(t)}
+                activeOpacity={0.75}
+              >
+                <Text style={[styles.typeToggleText, isActive && styles.typeToggleTextActive]}>
+                  {t === "daily" ? "Daily Specials" : "Other Specials"}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
+        {loading ? (
+          <View style={{ paddingHorizontal: spacing.base, paddingTop: spacing.xl }}>
+            {[1, 2, 3].map((i) => (
+              <SpecialCardSkeleton key={i} />
+            ))}
+          </View>
+        ) : specials.length === 0 ? (
           <View style={styles.emptyState}>
             <Ionicons
               name="sparkles-outline"
@@ -166,7 +208,6 @@ export default function SpecialScreen({ route, navigation }: any) {
           </View>
         ) : (
           <View style={styles.carouselSection}>
-            <AnimatedBackground variant="light" particleCount={6} />
             <Animated.FlatList
               ref={flatListRef}
               horizontal
@@ -255,10 +296,30 @@ export default function SpecialScreen({ route, navigation }: any) {
                         )}
                       </View>
                       <CornerAccents size={10} color={colors.secondary.main} />
-                      {/* Status badge */}
+                      {/* Type badge */}
                       <View style={styles.specialBadge}>
-                        <Text style={styles.specialBadgeText}>New</Text>
+                        <Text style={styles.specialBadgeText}>
+                          {item.type === "daily"
+                            ? "Daily"
+                            : item.type === "seasonal"
+                              ? "Seasonal"
+                              : item.type === "chef"
+                                ? "Chef's"
+                                : item.type === "game_time"
+                                  ? "Game Day"
+                                  : item.type === "day_time"
+                                    ? "Day Time"
+                                    : "Special"}
+                        </Text>
                       </View>
+                      {/* Day-of-week badge for daily specials */}
+                      {item.type === "daily" && item.dayOfWeek && (
+                        <View style={styles.specialDayBadge}>
+                          <Text style={styles.specialDayBadgeText}>
+                            {item.dayOfWeek}
+                          </Text>
+                        </View>
+                      )}
                     </TouchableOpacity>
                   </Animated.View>
                 );
@@ -294,69 +355,10 @@ export default function SpecialScreen({ route, navigation }: any) {
           </View>
         )}
 
-        {/* ════ Specials List Section ════ */}
-        {specials.length > 0 && (
-          <View style={styles.listSection}>
-            <SectionHeader
-              title="All Specials"
-              subtitle="Browse our complete selection"
-            />
-            {specials.map((item) => (
-              <TouchableOpacity
-                key={item.id}
-                style={styles.listCard}
-                activeOpacity={0.85}
-                onPress={() => setSelectedSpecial(item)}
-              >
-                <Image
-                  source={{
-                    uri:
-                      getImageUrl(item.imageUrls?.[0]) ||
-                      "https://i.pinimg.com/736x/42/2c/2e/422c2e649799697f1d1355ba8f308edd.jpg",
-                  }}
-                  style={styles.listCardImage}
-                  contentFit="cover"
-                  transition={300}
-                />
-                <View style={styles.listCardContent}>
-                  <Text style={styles.listCardTitle} numberOfLines={1}>
-                    {item.title}
-                  </Text>
-                  {item.description && (
-                    <Text style={styles.listCardDesc} numberOfLines={2}>
-                      {item.description}
-                    </Text>
-                  )}
-                  <View style={styles.listCardMeta}>
-                    <View style={styles.listCardTypeBadge}>
-                      <Text style={styles.listCardTypeText}>
-                        {item.type === "daily"
-                          ? "Daily"
-                          : item.type === "seasonal"
-                            ? "Seasonal"
-                            : item.type === "chef"
-                              ? "Chef's"
-                              : "Special"}
-                      </Text>
-                    </View>
-                    <Ionicons
-                      name="chevron-forward"
-                      size={16}
-                      color={colors.secondary.main}
-                    />
-                  </View>
-                </View>
-                <CornerAccents size={8} color={colors.secondary.main} />
-              </TouchableOpacity>
-            ))}
-          </View>
-        )}
-
-        <Footer />
       </ScrollView>
 
       {/* Floating call FAB */}
-      <FloatingCallButton />
+      <SocialFAB />
 
       {/* ════ Detail Popup ════ */}
       <Modal
@@ -367,20 +369,29 @@ export default function SpecialScreen({ route, navigation }: any) {
         onRequestClose={() => setSelectedSpecial(null)}
       >
         <View style={styles.popupOverlay}>
-          {/* Close button */}
-          <TouchableOpacity
-            style={[styles.popupClose, { top: insets.top + spacing.md }]}
-            onPress={() => setSelectedSpecial(null)}
-            activeOpacity={0.7}
-          >
-            <View style={styles.popupCloseInner}>
-              <Ionicons
-                name="close"
-                size={24}
-                color={colors.background.paper}
-              />
-            </View>
-          </TouchableOpacity>
+          {/* Top action bar: Close + Share */}
+          <View style={[styles.popupTopBar, { top: insets.top + spacing.md }]}>
+            <TouchableOpacity
+              style={styles.popupClose}
+              onPress={() => setSelectedSpecial(null)}
+              activeOpacity={0.7}
+            >
+              <View style={styles.popupCloseInner}>
+                <Ionicons name="close" size={24} color={colors.background.paper} />
+              </View>
+            </TouchableOpacity>
+            {selectedSpecial && (
+              <TouchableOpacity
+                style={styles.popupShareBtn}
+                onPress={() => shareSpecial(selectedSpecial.title, selectedSpecial.description)}
+                activeOpacity={0.7}
+              >
+                <View style={styles.popupCloseInner}>
+                  <Ionicons name="share-social-outline" size={22} color={colors.background.paper} />
+                </View>
+              </TouchableOpacity>
+            )}
+          </View>
 
           {/* Full-screen image */}
           {selectedSpecial && (
@@ -457,18 +468,33 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background.default,
   },
 
-  /* Back button */
-  backButton: {
-    position: "absolute",
-    left: spacing.base,
-    zIndex: 20,
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: "rgba(255,255,255,0.9)",
+  /* Type toggle */
+  typeToggleRow: {
+    flexDirection: "row",
+    marginHorizontal: spacing.base,
+    marginTop: spacing.lg,
+    marginBottom: spacing.sm,
+    backgroundColor: "rgba(74,44,23,0.08)",
+    borderRadius: borderRadius.lg,
+    padding: 3,
+  },
+  typeToggleBtn: {
+    flex: 1,
+    paddingVertical: spacing.sm,
     alignItems: "center",
-    justifyContent: "center",
-    ...shadows.sm,
+    borderRadius: borderRadius.md,
+  },
+  typeToggleBtnActive: {
+    backgroundColor: colors.secondary.main,
+  },
+  typeToggleText: {
+    fontFamily: typography.fontFamily.bodySemibold,
+    fontSize: typography.fontSize.sm,
+    color: colors.text.muted,
+    letterSpacing: 0.3,
+  },
+  typeToggleTextActive: {
+    color: "#fff",
   },
 
   /* Empty state */
@@ -523,12 +549,13 @@ const styles = StyleSheet.create({
   },
   specialCardTitle: {
     fontFamily: typography.fontFamily.heading,
-    fontSize: typography.fontSize.xl,
+    fontSize: 24,
     color: colors.background.paper,
     textShadowColor: colors.overlay.medium,
     textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 4,
+    textShadowRadius: 6,
     marginBottom: spacing.xs,
+    lineHeight: 28,
   },
   specialCardDesc: {
     fontFamily: typography.fontFamily.body,
@@ -539,7 +566,7 @@ const styles = StyleSheet.create({
   specialBadge: {
     position: "absolute",
     top: spacing.md,
-    right: spacing.md,
+    left: spacing.md,
     backgroundColor: colors.secondary.main,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.xs,
@@ -551,6 +578,24 @@ const styles = StyleSheet.create({
     color: colors.background.paper,
     textTransform: "uppercase",
     letterSpacing: 1,
+  },
+  specialDayBadge: {
+    position: "absolute",
+    top: spacing.md,
+    right: spacing.md,
+    backgroundColor: "rgba(40,20,8,0.65)",
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    borderRadius: borderRadius.sm,
+    borderWidth: 1,
+    borderColor: "rgba(217,167,86,0.5)",
+  },
+  specialDayBadgeText: {
+    fontFamily: typography.fontFamily.bodySemibold,
+    fontSize: 10,
+    color: colors.secondary.main,
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
   },
 
   /* Dots */
@@ -583,9 +628,19 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  popupClose: {
+  popupTopBar: {
     position: "absolute",
-    right: spacing.base,
+    left: 0,
+    right: 0,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingHorizontal: spacing.base,
+    zIndex: 20,
+  },
+  popupClose: {
+    zIndex: 20,
+  },
+  popupShareBtn: {
     zIndex: 20,
   },
   popupCloseInner: {

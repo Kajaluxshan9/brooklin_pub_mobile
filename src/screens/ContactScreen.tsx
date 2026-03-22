@@ -15,20 +15,18 @@ import {
   KeyboardAvoidingView,
   Platform,
   Animated,
+  RefreshControl,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { WebView } from "react-native-webview";
 import * as DocumentPicker from "expo-document-picker";
 
-import HeroSection from "../components/common/HeroSection";
-import Footer from "../components/common/Footer";
-import FloatingCallButton from "../components/common/FloatingCallButton";
+import PageHeader from "../components/common/PageHeader";
+import SocialFAB from "../components/common/SocialFAB";
 import {
   GoldDivider,
   CornerAccents,
-  AnimatedBackground,
-} from "../components/common/SharedComponents";
+} from "../components/common";
 
 import { useApiWithCache } from "../hooks/useApi";
 import { openingHoursService } from "../services/opening-hours.service";
@@ -147,30 +145,63 @@ interface ContactInfoCardProps {
   icon: keyof typeof Ionicons.glyphMap;
   title: string;
   children: React.ReactNode;
+  delay?: number;
 }
 
-const ContactInfoCard = ({ icon, title, children }: ContactInfoCardProps) => (
-  <View style={cardStyles.container}>
-    <LinearGradient
-      colors={[colors.secondary.main, "#B08030", colors.secondary.main]}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 1, y: 0 }}
-      style={cardStyles.topBar}
-    />
-    <View style={cardStyles.inner}>
-      <LinearGradient
-        colors={[colors.secondary.main, "#B08030"]}
-        style={cardStyles.iconBox}
-      >
-        <Ionicons name={icon} size={24} color="#fff" />
-      </LinearGradient>
-      <View style={cardStyles.content}>
-        <Text style={cardStyles.title}>{title}</Text>
-        {children}
+const ContactInfoCard = ({
+  icon,
+  title,
+  children,
+  delay = 0,
+}: ContactInfoCardProps) => {
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(20)).current;
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      Animated.parallel([
+        Animated.timing(fadeAnim, {
+          toValue: 1,
+          duration: 500,
+          useNativeDriver: true,
+        }),
+        Animated.timing(slideAnim, {
+          toValue: 0,
+          duration: 500,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    }, delay);
+    return () => clearTimeout(timer);
+  }, []);
+
+  return (
+    <Animated.View
+      style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}
+    >
+      <View style={cardStyles.container}>
+        <LinearGradient
+          colors={[colors.secondary.main, "#B08030", colors.secondary.main]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 0 }}
+          style={cardStyles.topBar}
+        />
+        <View style={cardStyles.inner}>
+          <LinearGradient
+            colors={[colors.secondary.main, "#B08030"]}
+            style={cardStyles.iconBox}
+          >
+            <Ionicons name={icon} size={22} color="#fff" />
+          </LinearGradient>
+          <View style={cardStyles.content}>
+            <Text style={cardStyles.title}>{title}</Text>
+            {children}
+          </View>
+        </View>
       </View>
-    </View>
-  </View>
-);
+    </Animated.View>
+  );
+};
 
 const cardStyles = StyleSheet.create({
   container: {
@@ -189,8 +220,8 @@ const cardStyles = StyleSheet.create({
     gap: spacing.md,
   },
   iconBox: {
-    width: 48,
-    height: 48,
+    width: 44,
+    height: 44,
     borderRadius: borderRadius.md,
     alignItems: "center",
     justifyContent: "center",
@@ -347,7 +378,7 @@ const inputStyles = StyleSheet.create({
     borderColor: colors.border.gold,
     paddingHorizontal: spacing.base,
     paddingVertical: Platform.OS === "ios" ? spacing.md : spacing.sm,
-    minHeight: 52,
+    minHeight: 56,
   },
   inputError: { borderColor: colors.error, borderWidth: 1.5 },
   input: {
@@ -363,6 +394,128 @@ const inputStyles = StyleSheet.create({
     marginLeft: spacing.xs,
   },
 });
+
+// ======================================================================
+// ANIMATED SUCCESS MESSAGE
+// ======================================================================
+
+const SuccessMessage = ({
+  isReservation,
+  isCareers,
+  email,
+}: {
+  isReservation: boolean;
+  isCareers: boolean;
+  email: string;
+}) => {
+  const scaleAnim = useRef(new Animated.Value(0.8)).current;
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const circleScale = useRef(new Animated.Value(0)).current;
+  const circleRotate = useRef(new Animated.Value(-180)).current;
+  const textSlide = useRef(new Animated.Value(20)).current;
+  const textFade = useRef(new Animated.Value(0)).current;
+  const boxSlide = useRef(new Animated.Value(20)).current;
+  const boxFade = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.sequence([
+      Animated.parallel([
+        Animated.spring(scaleAnim, { toValue: 1, tension: 200, friction: 15, useNativeDriver: true }),
+        Animated.timing(fadeAnim, { toValue: 1, duration: 600, useNativeDriver: true }),
+      ]),
+      Animated.parallel([
+        Animated.spring(circleScale, { toValue: 1, tension: 200, friction: 12, useNativeDriver: true }),
+        Animated.timing(circleRotate, { toValue: 0, duration: 500, useNativeDriver: true }),
+      ]),
+      Animated.parallel([
+        Animated.timing(textFade, { toValue: 1, duration: 400, useNativeDriver: true }),
+        Animated.timing(textSlide, { toValue: 0, duration: 400, useNativeDriver: true }),
+      ]),
+      Animated.parallel([
+        Animated.timing(boxFade, { toValue: 1, duration: 400, useNativeDriver: true }),
+        Animated.timing(boxSlide, { toValue: 0, duration: 400, useNativeDriver: true }),
+      ]),
+    ]).start();
+  }, []);
+
+  const rotateInterp = circleRotate.interpolate({
+    inputRange: [-180, 0],
+    outputRange: ["-180deg", "0deg"],
+  });
+
+  return (
+    <Animated.View
+      style={[
+        styles.successContainer,
+        { opacity: fadeAnim, transform: [{ scale: scaleAnim }] },
+      ]}
+    >
+      <Animated.View
+        style={[
+          styles.successCircle,
+          { transform: [{ scale: circleScale }, { rotate: rotateInterp }] },
+        ]}
+      >
+        <Ionicons name="checkmark-circle" size={64} color="#fff" />
+      </Animated.View>
+      <Animated.View style={{ opacity: textFade, transform: [{ translateY: textSlide }] }}>
+        <Text style={styles.successTitle}>
+          {isReservation
+            ? "Reservation Request Sent!"
+            : isCareers
+              ? "Application Submitted!"
+              : "Message Sent!"}
+        </Text>
+      </Animated.View>
+      <Animated.View style={{ opacity: textFade, transform: [{ translateY: textSlide }] }}>
+        <Text style={styles.successDesc}>
+          {isReservation
+            ? "Thank you! We'll confirm your party reservation shortly via email."
+            : isCareers
+              ? "Thank you for your interest! Our team will review your application and get back to you soon."
+              : "Thank you for reaching out! We'll get back to you within 24 hours."}
+        </Text>
+      </Animated.View>
+      <Animated.View style={[styles.confirmBox, { opacity: boxFade, transform: [{ translateY: boxSlide }] }]}>
+        <Ionicons name="mail" size={24} color={colors.secondary.main} />
+        <View style={{ marginLeft: spacing.md }}>
+          <Text style={styles.confirmLabel}>Confirmation sent to</Text>
+          <Text style={styles.confirmEmail}>{email}</Text>
+        </View>
+      </Animated.View>
+    </Animated.View>
+  );
+};
+
+// ======================================================================
+// ANIMATED FORM WRAPPER
+// ======================================================================
+
+const AnimatedFormWrapper = ({ children }: { children: React.ReactNode }) => {
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(30)).current;
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      Animated.parallel([
+        Animated.timing(fadeAnim, { toValue: 1, duration: 800, useNativeDriver: true }),
+        Animated.timing(slideAnim, { toValue: 0, duration: 800, useNativeDriver: true }),
+      ]).start();
+    }, 400);
+    return () => clearTimeout(timer);
+  }, []);
+
+  return (
+    <Animated.View
+      style={[
+        styles.formWrapper,
+        { opacity: fadeAnim, transform: [{ translateY: slideAnim }] },
+      ]}
+    >
+      {children}
+    </Animated.View>
+  );
+};
 
 // ======================================================================
 // MAIN COMPONENT
@@ -396,15 +549,23 @@ export default function ContactScreen() {
   const isReservation = formData.subject === "reservation";
   const isCareers = formData.subject === "careers";
 
+  const [refreshing, setRefreshing] = useState(false);
+
   // Fetch opening hours
-  const { data: openingHoursData } = useApiWithCache<OpeningHours[]>(
+  const { data: openingHoursData, refetch: hoursRefetch } = useApiWithCache<OpeningHours[]>(
     "opening-hours",
     () => openingHoursService.getAllOpeningHours(),
   );
-  const { data: openStatus } = useApiWithCache("opening-hours-status", () =>
+  const { data: openStatus, refetch: statusRefetch } = useApiWithCache("opening-hours-status", () =>
     openingHoursService.getCurrentStatus(),
   );
   const displayHours = formatOpeningHours(openingHoursData);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await Promise.allSettled([hoursRefetch(), statusRefetch()]);
+    setRefreshing(false);
+  }, [hoursRefetch, statusRefetch]);
 
   // -- Handlers --
 
@@ -481,6 +642,15 @@ export default function ContactScreen() {
       const response = await contactService.submitContactForm({
         ...formData,
         message: fullMessage,
+        ...(isCareers && cvFile
+          ? {
+              cvFile: {
+                uri: cvFile.uri,
+                name: cvFile.name,
+                type: cvFile.mimeType || "application/pdf",
+              },
+            }
+          : {}),
       });
       if (response.success) {
         setSubmitted(true);
@@ -535,35 +705,27 @@ export default function ContactScreen() {
         contentContainerStyle={styles.contentContainer}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
+        bounces={true}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={colors.secondary.main}
+            colors={[colors.secondary.main]}
+          />
+        }
       >
-        {/* === HERO === */}
-        <HeroSection
+        {/* === PAGE HEADER === */}
+        <PageHeader
           title="Contact Us"
-          overlineText="Get In Touch"
-          subtitle="Reservations, private events, or just saying hello — our door is always open"
-          variant="light"
-          height={260}
+          subtitle="Reservations, private events, or just saying hello"
+          icon="mail-outline"
         />
-
-        {/* === SECTION HEADER === */}
-        <View style={styles.sectionHeaderWrap}>
-          <AnimatedBackground variant="light" particleCount={6} />
-          <Text style={styles.overline}>{"◆ Your Table's Waiting ◆"}</Text>
-          <Text style={styles.sectionTitle}>
-            How Can We{" "}
-            <Text style={{ color: colors.secondary.main }}>Help You?</Text>
-          </Text>
-          <Text style={styles.sectionDesc}>
-            From reservations to private events, feedback to career
-            opportunities — our door is always open. Where every stranger's a
-            friend you haven't met.
-          </Text>
-        </View>
 
         {/* === CONTACT INFO CARDS === */}
         <View style={styles.cardsContainer}>
           {/* Visit Us */}
-          <ContactInfoCard icon="location-outline" title="Visit Us">
+          <ContactInfoCard icon="location-outline" title="Visit Us" delay={100}>
             <Text style={styles.addressText}>
               <Text style={styles.addressBold}>15 Baldwin Street</Text>
               {"\n"}Whitby, ON L1M 1A2{"\n"}Canada
@@ -586,7 +748,7 @@ export default function ContactScreen() {
           </ContactInfoCard>
 
           {/* Get in Touch */}
-          <ContactInfoCard icon="call-outline" title="Get in Touch">
+          <ContactInfoCard icon="call-outline" title="Get in Touch" delay={200}>
             <ContactRow
               icon="call-outline"
               text={CONTACT_INFO.PHONE}
@@ -617,7 +779,11 @@ export default function ContactScreen() {
           </ContactInfoCard>
 
           {/* Opening Hours */}
-          <ContactInfoCard icon="time-outline" title="Opening Hours">
+          <ContactInfoCard
+            icon="time-outline"
+            title="Opening Hours"
+            delay={300}
+          >
             <View style={styles.hoursContainer}>
               {displayHours.map((h, idx) => (
                 <View
@@ -646,42 +812,19 @@ export default function ContactScreen() {
         </View>
 
         {/* === CONTACT FORM === */}
-        <View style={styles.formWrapper}>
+        <AnimatedFormWrapper>
           <LinearGradient
             colors={[colors.secondary.main, "#B08030", colors.secondary.main]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 0 }}
             style={styles.formTopBar}
           />
-          <CornerAccents />
-
           {submitted ? (
-            <View style={styles.successContainer}>
-              <View style={styles.successCircle}>
-                <Ionicons name="checkmark-circle" size={64} color="#fff" />
-              </View>
-              <Text style={styles.successTitle}>
-                {isReservation
-                  ? "Reservation Request Sent!"
-                  : isCareers
-                    ? "Application Submitted!"
-                    : "Message Sent!"}
-              </Text>
-              <Text style={styles.successDesc}>
-                {isReservation
-                  ? "Thank you! We'll confirm your party reservation shortly via email."
-                  : isCareers
-                    ? "Thank you for your interest! Our team will review your application and get back to you soon."
-                    : "Thank you for reaching out! We'll get back to you within 24 hours."}
-              </Text>
-              <View style={styles.confirmBox}>
-                <Ionicons name="mail" size={24} color={colors.secondary.main} />
-                <View style={{ marginLeft: spacing.md }}>
-                  <Text style={styles.confirmLabel}>Confirmation sent to</Text>
-                  <Text style={styles.confirmEmail}>{formData.email}</Text>
-                </View>
-              </View>
-            </View>
+            <SuccessMessage
+              isReservation={isReservation}
+              isCareers={isCareers}
+              email={formData.email}
+            />
           ) : (
             <View style={styles.formInner}>
               {/* Form Header */}
@@ -925,35 +1068,35 @@ export default function ContactScreen() {
               </TouchableOpacity>
             </View>
           )}
-        </View>
+        </AnimatedFormWrapper>
 
         {/* === MAP SECTION === */}
         <View style={styles.mapSection}>
-          <Text style={styles.overline}>{" Find Us "}</Text>
-          <Text style={styles.mapTitle}>Visit Our Location</Text>
-          <View style={styles.mapContainer}>
-            <WebView
-              source={{
-                html: `<!DOCTYPE html>
-<html><head><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<style>*{margin:0;padding:0}iframe{width:100%;height:100%;border:0}</style></head>
-<body><iframe src="${EXTERNAL_URLS.GOOGLE_MAPS_EMBED}" allowfullscreen loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe></body></html>`,
-              }}
-              style={styles.mapWebView}
-              javaScriptEnabled
-              domStorageEnabled
-              originWhitelist={["https://*", "http://*"]}
-              scrollEnabled={false}
-              nestedScrollEnabled={false}
-              startInLoadingState
-              allowsInlineMediaPlayback
-            />
-            <View style={styles.mapBorder} pointerEvents="none" />
-          </View>
+          <Text style={styles.mapTitle}>Find Us</Text>
+          <TouchableOpacity
+            style={styles.mapCard}
+            onPress={() => Linking.openURL(EXTERNAL_URLS.GOOGLE_MAPS).catch(() => {})}
+            activeOpacity={0.85}
+          >
+            <LinearGradient
+              colors={["#3C1F0E", "#5A3018", "#3C1F0E"]}
+              style={styles.mapCardGradient}
+            >
+              <Ionicons name="map-outline" size={40} color="#D9A756" />
+              <View style={styles.mapCardInfo}>
+                <Text style={styles.mapCardTitle}>Brooklin Pub & Grill</Text>
+                <Text style={styles.mapCardAddress}>
+                  15 Baldwin Street, Whitby, ON L1M 1A2
+                </Text>
+              </View>
+              <View style={styles.mapCardAction}>
+                <Ionicons name="navigate" size={18} color="#D9A756" />
+                <Text style={styles.mapCardActionText}>Open in Maps</Text>
+              </View>
+            </LinearGradient>
+          </TouchableOpacity>
         </View>
 
-        {/* === FOOTER === */}
-        <Footer openStatus={openStatus} />
 
         {/* === SUBJECT PICKER MODAL === */}
         <Modal
@@ -1019,7 +1162,7 @@ export default function ContactScreen() {
       </ScrollView>
 
       {/* Floating call FAB */}
-      <FloatingCallButton />
+      <SocialFAB />
     </KeyboardAvoidingView>
   );
 }
@@ -1065,6 +1208,7 @@ const styles = StyleSheet.create({
 
   cardsContainer: {
     paddingHorizontal: spacing.base,
+    paddingTop: spacing.xl,
     gap: spacing.base,
     marginBottom: spacing.xl,
   },
@@ -1117,11 +1261,15 @@ const styles = StyleSheet.create({
     marginHorizontal: spacing.base,
     marginBottom: spacing["2xl"],
     borderRadius: borderRadius["2xl"],
-    backgroundColor: colors.background.card,
+    backgroundColor: "rgba(255,255,255,0.98)",
     borderWidth: 1,
-    borderColor: colors.border.gold,
+    borderColor: "rgba(217,167,86,0.25)",
     overflow: "hidden",
-    ...shadows.lg,
+    shadowColor: "rgba(106,58,30,0.12)",
+    shadowOffset: { width: 0, height: 20 },
+    shadowOpacity: 1,
+    shadowRadius: 30,
+    elevation: 8,
   },
   formTopBar: { height: 4, width: "100%" },
   formInner: { padding: spacing.lg },
@@ -1129,9 +1277,10 @@ const styles = StyleSheet.create({
   formHeader: { alignItems: "center", marginBottom: spacing.xl },
   formTitle: {
     fontFamily: typography.fontFamily.heading,
-    fontSize: typography.fontSize["2xl"],
+    fontSize: 30,
     color: colors.text.primary,
     marginBottom: spacing.sm,
+    letterSpacing: -0.3,
   },
   formSubtitle: {
     color: colors.primary.main,
@@ -1236,9 +1385,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: spacing.md,
-    paddingVertical: spacing.base,
+    paddingVertical: spacing.base + 2,
     paddingHorizontal: spacing["2xl"],
-    minHeight: 52,
+    minHeight: 56,
   },
   submitText: {
     color: colors.background.paper,
@@ -1252,18 +1401,23 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
   },
   successCircle: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
+    width: 120,
+    height: 120,
+    borderRadius: 60,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: colors.success,
-    marginBottom: spacing.lg,
-    ...shadows.lg,
+    marginBottom: spacing.xl,
+    shadowColor: "rgba(76, 175, 80, 0.4)",
+    shadowOffset: { width: 0, height: 20 },
+    shadowOpacity: 1,
+    shadowRadius: 30,
+    elevation: 12,
   },
   successTitle: {
     fontFamily: typography.fontFamily.heading,
-    fontSize: typography.fontSize["2xl"],
+    fontSize: 28,
+    fontWeight: "700" as const,
     color: colors.text.primary,
     marginBottom: spacing.md,
     textAlign: "center",
@@ -1298,6 +1452,7 @@ const styles = StyleSheet.create({
 
   mapSection: {
     paddingHorizontal: spacing.base,
+    marginTop: spacing.xl,
     marginBottom: spacing["2xl"],
     alignItems: "center",
   },
@@ -1309,23 +1464,58 @@ const styles = StyleSheet.create({
     marginBottom: spacing.lg,
     letterSpacing: -0.5,
   },
-  mapContainer: {
+  mapCard: {
     width: "100%",
-    height: 280,
     borderRadius: borderRadius.xl,
     overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "rgba(217,167,86,0.3)",
+    minHeight: 140,
     ...shadows.lg,
   },
-  mapWebView: { flex: 1 },
-  mapBorder: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    borderWidth: 3,
-    borderColor: "rgba(217,167,86,0.4)",
-    borderRadius: borderRadius.xl,
+  mapCardGradient: {
+    padding: spacing.xl,
+    paddingVertical: spacing["2xl"],
+    alignItems: "center",
+    gap: spacing.md,
+    flexDirection: "column",
+    justifyContent: "center",
+    minHeight: 140,
+  },
+  mapCardInfo: {
+    alignItems: "center",
+    gap: spacing.xs,
+  },
+  mapCardTitle: {
+    fontFamily: typography.fontFamily.heading,
+    fontSize: typography.fontSize.lg,
+    color: "#F5EFE6",
+    letterSpacing: 0.5,
+  },
+  mapCardAddress: {
+    fontFamily: typography.fontFamily.body,
+    fontSize: typography.fontSize.sm,
+    color: "rgba(245,239,230,0.7)",
+    textAlign: "center",
+    lineHeight: 20,
+  },
+  mapCardAction: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.md,
+    borderRadius: 30,
+    borderWidth: 1,
+    borderColor: "rgba(217,167,86,0.5)",
+    backgroundColor: "rgba(217,167,86,0.12)",
+    marginTop: spacing.xs,
+  },
+  mapCardActionText: {
+    fontFamily: typography.fontFamily.bodySemibold,
+    fontSize: typography.fontSize.sm,
+    color: "#D9A756",
+    letterSpacing: 0.5,
   },
 
   modalOverlay: {

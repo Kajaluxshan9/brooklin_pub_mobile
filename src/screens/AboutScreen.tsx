@@ -14,6 +14,7 @@ import {
   TouchableOpacity,
   Animated,
   PanResponder,
+  RefreshControl,
 } from "react-native";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
@@ -29,10 +30,9 @@ import { useApiWithCache } from "../hooks/useApi";
 import { storiesService } from "../services/stories.service";
 import { getImageUrl } from "../services/api";
 import type { StoryCategory } from "../types/api.types";
-import { GoldDivider, ErrorView } from "../components/common/SharedComponents";
-import HeroSection from "../components/common/HeroSection";
-import Footer from "../components/common/Footer";
-import LoadingScreen from "../components/common/LoadingScreen";
+import { GoldDivider, ErrorView } from "../components/common";
+import PageHeader from "../components/common/PageHeader";
+import AppBrandStrip from "../components/common/AppBrandStrip";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
@@ -446,6 +446,7 @@ const GalleryRowMobile = ({
 /* ═══════════════════════════════════════════════════════ */
 export default function AboutScreen() {
   const insets = useSafeAreaInsets();
+  const [refreshing, setRefreshing] = useState(false);
 
   // Fetch story categories
   const {
@@ -511,20 +512,33 @@ export default function AboutScreen() {
       .filter((row) => row.images.length > 0);
   }, [categories]);
 
-  if (loading) return <LoadingScreen />;
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await refetch();
+    setRefreshing(false);
+  }, [refetch]);
+
   if (error) return <ErrorView message={error} onRetry={refetch} />;
 
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
-      <ScrollView showsVerticalScrollIndicator={false} bounces={false}>
-        {/* Hero - light variant matching frontend */}
-        <HeroSection
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        bounces={true}
+        contentContainerStyle={{ paddingBottom: insets.bottom + 88 }}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={colors.secondary.main}
+            colors={[colors.secondary.main]}
+          />
+        }
+      >
+        <PageHeader
           title="About Us"
-          overlineText={"\u2726 DISCOVER OUR HERITAGE \u2726"}
-          subtitle="A local favorite since 2014, where great food meets warm hospitality"
-          backgroundImage={require("../assets/images/hero-bg.jpg")}
-          variant="light"
-          height={300}
+          subtitle="A local favourite since 2014"
+          icon="information-circle-outline"
         />
 
         {/* ═══ Auto-Rotating Slideshow (AboutUs) ═══ */}
@@ -538,27 +552,11 @@ export default function AboutScreen() {
           >
             {/* Section Header */}
             <View style={styles.gallerySectionHeader}>
-              <View style={styles.galleryHeaderLine}>
-                <View style={styles.galleryHeaderDotLeft} />
-                <View style={styles.galleryHeaderDotRight} />
-              </View>
-
-              <Text style={styles.galleryOverline}>
-                {"\u25C6"} Our Story {"\u25C6"}
-              </Text>
-
               <Text style={styles.gallerySectionTitle}>A Glimpse Inside</Text>
 
               <Text style={styles.gallerySectionDesc}>
-                Nestled in the heart of Whitby at 15 Baldwin Street, Brooklin
-                Pub & Grill has been a cornerstone of the community, bringing
-                people together over exceptional food and drinks.
-              </Text>
-
-              <Text style={styles.gallerySectionDesc}>
-                We pride ourselves on creating a warm, welcoming atmosphere
-                where families can enjoy a meal together and everyone feels like
-                part of our extended family.
+                A cornerstone of Whitby since 2014 — great food, warm
+                atmosphere, and always a place where everyone belongs.
               </Text>
 
               <View style={styles.galleryHeaderDivider} />
@@ -609,8 +607,7 @@ export default function AboutScreen() {
           </LinearGradient>
         </View>
 
-        {/* Footer */}
-        <Footer />
+        <AppBrandStrip />
       </ScrollView>
     </View>
   );
@@ -675,13 +672,13 @@ const styles = StyleSheet.create({
   },
   slideTitle: {
     fontFamily: typography.fontFamily.heading,
-    fontSize: typography.fontSize["3xl"],
+    fontSize: 36,
     color: colors.text.primary,
-    letterSpacing: 1.5,
+    letterSpacing: 1.2,
     textTransform: "uppercase",
     textAlign: "center",
     marginBottom: spacing.md,
-    lineHeight: typography.fontSize["3xl"] * 1.1,
+    lineHeight: 40,
   },
   slideSubtitle: {
     fontFamily: typography.fontFamily.body,
@@ -971,8 +968,9 @@ const styles = StyleSheet.create({
   },
   sinceStatNumber: {
     fontFamily: typography.fontFamily.heading,
-    fontSize: typography.fontSize["2xl"],
+    fontSize: 48,
     color: colors.secondary.main,
+    lineHeight: 52,
   },
   sinceStatLabel: {
     fontFamily: typography.fontFamily.body,

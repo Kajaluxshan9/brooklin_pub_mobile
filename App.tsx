@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect } from "react";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
@@ -19,6 +19,9 @@ import { GreatVibes_400Regular } from "@expo-google-fonts/great-vibes";
 import { PlayfairDisplay_700Bold } from "@expo-google-fonts/playfair-display";
 import AppNavigator from "./src/navigation/AppNavigator";
 import LoadingScreen from "./src/components/common/LoadingScreen";
+import { ErrorBoundary } from "./src/components/common/ErrorBoundary";
+import { ToastProvider } from "./src/components/common/Toast";
+import OfflineBanner from "./src/components/common/OfflineBanner";
 
 // Keep splash screen visible while loading fonts
 SplashScreen.preventAutoHideAsync().catch(() => {});
@@ -54,11 +57,16 @@ export default function App() {
   }
 
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
-      <SafeAreaProvider>
-        <StatusBar style="dark" backgroundColor="#FDF8F3" />
-        <AppNavigator />
-      </SafeAreaProvider>
-    </GestureHandlerRootView>
+    <ErrorBoundary>
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <SafeAreaProvider>
+          <ToastProvider>
+            <StatusBar style="dark" backgroundColor="#FDF8F3" />
+            <AppNavigator />
+            <OfflineBanner />
+          </ToastProvider>
+        </SafeAreaProvider>
+      </GestureHandlerRootView>
+    </ErrorBoundary>
   );
 }

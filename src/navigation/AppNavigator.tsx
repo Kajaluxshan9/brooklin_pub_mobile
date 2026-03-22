@@ -98,17 +98,13 @@ const TabBarIcon = ({
   const iconName = focused ? icons.focused : icons.outline;
   return (
     <View style={styles.tabIconContainer}>
-      <Ionicons name={iconName} size={22} color={color} />
-      <View style={styles.activeIndicatorWrap}>
-        {focused && (
-          <LinearGradient
-            colors={["#D9A756", "#B08030"]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
-            style={styles.activeIndicator}
-          />
-        )}
-      </View>
+      {focused && (
+        <LinearGradient
+          colors={["rgba(217,167,86,0.25)", "rgba(217,167,86,0.08)"]}
+          style={styles.tabActiveBackground}
+        />
+      )}
+      <Ionicons name={iconName} size={20} color={color} />
     </View>
   );
 };
@@ -142,8 +138,9 @@ const AppNavigator = () => {
             />
           ),
           tabBarActiveTintColor: "#D9A756",
-          tabBarInactiveTintColor: "rgba(106,58,30,0.5)",
-          tabBarShowLabel: false,
+          tabBarInactiveTintColor: "rgba(106,58,30,0.45)",
+          tabBarShowLabel: true,
+          tabBarLabelStyle: styles.tabBarLabel,
           tabBarStyle: styles.tabBar,
           tabBarItemStyle: styles.tabBarItem,
           tabBarBackground: () => <GlassTabBarBackground />,
@@ -188,59 +185,63 @@ const AppNavigator = () => {
 const styles = StyleSheet.create({
   glassTabBarBg: {
     ...StyleSheet.absoluteFillObject,
-    borderRadius: 28,
+    borderRadius: 24,
     overflow: "hidden",
-    backgroundColor: "rgba(255, 253, 251, 0.92)",
+    backgroundColor: "rgba(255, 253, 251, 0.96)",
   },
   tabBarTopAccent: {
     position: "absolute",
     top: 0,
     left: 16,
     right: 16,
-    height: 2,
+    height: 1.5,
     borderRadius: 1,
   },
   tabBar: {
     position: "absolute",
-    bottom: Platform.OS === "ios" ? 24 : 16,
-    left: 16,
-    right: 16,
-    height: 56,
-    borderRadius: 28,
+    bottom: Platform.OS === "ios" ? 22 : 14,
+    left: 10,
+    right: 10,
+    height: 68,
+    borderRadius: 26,
     borderTopWidth: 0,
     backgroundColor: "transparent",
     borderWidth: 1,
-    borderColor: "rgba(217,167,86,0.2)",
-    elevation: 16,
-    shadowColor: "rgba(106,58,30,0.3)",
+    borderColor: "rgba(217,167,86,0.3)",
+    elevation: 28,
+    shadowColor: "#1A0A02",
     shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.25,
+    shadowOpacity: 0.26,
     shadowRadius: 28,
     paddingBottom: 0,
     paddingTop: 0,
-    paddingHorizontal: 8,
+    paddingHorizontal: 2,
   },
   tabBarItem: {
     flex: 1,
     paddingVertical: 0,
-    height: 56,
+    height: 68,
     justifyContent: "center",
     alignItems: "center",
+  },
+  tabBarLabel: {
+    fontFamily: typography.fontFamily.bodySemibold,
+    fontSize: 11,
+    letterSpacing: 0.1,
+    marginTop: -1,
+    marginBottom: 5,
   },
   tabIconContainer: {
     alignItems: "center",
     justifyContent: "center",
-    width: 40,
+    width: 50,
+    height: 34,
+    borderRadius: 17,
+    position: "relative",
   },
-  activeIndicatorWrap: {
-    height: 7,
-    justifyContent: "flex-end",
-    alignItems: "center",
-  },
-  activeIndicator: {
-    width: 16,
-    height: 3,
-    borderRadius: 1.5,
+  tabActiveBackground: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 17,
   },
 });
 

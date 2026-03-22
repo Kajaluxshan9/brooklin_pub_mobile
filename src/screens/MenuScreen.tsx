@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import {
   View,
   Text,
@@ -8,6 +8,9 @@ import {
   TouchableOpacity,
   FlatList,
   Modal,
+  Animated,
+  RefreshControl,
+  TextInput,
 } from "react-native";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
@@ -35,11 +38,11 @@ import {
   CornerAccents,
   ErrorView,
   InfoChip,
-} from "../components/common/SharedComponents";
-import HeroSection from "../components/common/HeroSection";
-import Footer from "../components/common/Footer";
-import FloatingCallButton from "../components/common/FloatingCallButton";
-import LoadingScreen from "../components/common/LoadingScreen";
+} from "../components/common";
+import PageHeader from "../components/common/PageHeader";
+import SocialFAB from "../components/common/SocialFAB";
+import { useHaptics } from "../hooks/useHaptics";
+import { MenuItemSkeleton } from "../components/common/SkeletonLoader";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
@@ -74,8 +77,66 @@ type DisplayMenuItem = {
   imageUrls?: string[];
 };
 
+/* ─── Animated Card Wrapper (staggered entrance like frontend cardVariants) ─── */
+const AnimatedCard = ({
+  children,
+  index,
+  onPress,
+}: {
+  children: React.ReactNode;
+  index: number;
+  onPress: () => void;
+}) => {
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(60)).current;
+  const scaleAnim = useRef(new Animated.Value(0.9)).current;
+
+  useEffect(() => {
+    const delay = index * 100;
+    const timer = setTimeout(() => {
+      Animated.parallel([
+        Animated.timing(fadeAnim, {
+          toValue: 1,
+          duration: 600,
+          useNativeDriver: true,
+        }),
+        Animated.timing(slideAnim, {
+          toValue: 0,
+          duration: 600,
+          useNativeDriver: true,
+        }),
+        Animated.spring(scaleAnim, {
+          toValue: 1,
+          tension: 80,
+          friction: 10,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    }, delay);
+    return () => clearTimeout(timer);
+  }, []);
+
+  return (
+    <Animated.View
+      style={{
+        opacity: fadeAnim,
+        transform: [{ translateY: slideAnim }, { scale: scaleAnim }],
+      }}
+    >
+      <TouchableOpacity
+        style={styles.categoryCard}
+        onPress={onPress}
+        activeOpacity={0.85}
+      >
+        {children}
+      </TouchableOpacity>
+    </Animated.View>
+  );
+};
+
 export default function MenuScreen({ navigation, route }: any) {
   const insets = useSafeAreaInsets();
+  const { selection, light } = useHaptics();
   const [selectedPrimaryId, setSelectedPrimaryId] = useState<string | null>(
     null,
   );
@@ -87,6 +148,8 @@ export default function MenuScreen({ navigation, route }: any) {
     null,
   );
   const [showItemModal, setShowItemModal] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [refreshing, setRefreshing] = useState(false);
 
   // URL params from navigation
   const initialCategory = route?.params?.category;
@@ -107,9 +170,15 @@ export default function MenuScreen({ navigation, route }: any) {
   >("menu-categories", () => menuService.getCategories());
 
   // Fetch all menu items
-  const { data: allMenuItems, loading: itemsLoading } = useApiWithCache<
+  const { data: allMenuItems, loading: itemsLoading, refetch: itemsRefetch } = useApiWithCache<
     MenuItem[]
   >("all-menu-items", () => menuService.getAllMenuItems());
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await Promise.allSettled([pcRefetch(), itemsRefetch()]);
+    setRefreshing(false);
+  }, [pcRefetch, itemsRefetch]);
 
   // Auto-select first primary category
   useEffect(() => {
@@ -201,11 +270,28 @@ export default function MenuScreen({ navigation, route }: any) {
 
   // Filter by selected primary category
   const filteredMenu = useMemo(() => {
-    if (!selectedPrimaryId) return transformedMenuData;
-    return transformedMenuData.filter(
-      (entry) => entry.primaryCategoryId === selectedPrimaryId,
-    );
-  }, [transformedMenuData, selectedPrimaryId]);
+    let result = !selectedPrimaryId
+      ? transformedMenuData
+      : transformedMenuData.filter(
+          (entry) => entry.primaryCategoryId === selectedPrimaryId,
+        );
+
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim();
+      result = result
+        .map((entry) => ({
+          ...entry,
+          menuItems: entry.menuItems.filter(
+            (item) =>
+              item.name.toLowerCase().includes(q) ||
+              item.desc.toLowerCase().includes(q),
+          ),
+        }))
+        .filter((entry) => entry.menuItems.length > 0);
+    }
+
+    return result;
+  }, [transformedMenuData, selectedPrimaryId, searchQuery]);
 
   // Direct display items for desserts/kids
   const directDisplayItems = useMemo((): DisplayMenuItem[] => {
@@ -246,20 +332,60 @@ export default function MenuScreen({ navigation, route }: any) {
     return `$${price.toFixed(2)}`;
   };
 
-  if (pcLoading || catLoading || itemsLoading) return <LoadingScreen />;
   if (pcError) return <ErrorView message={pcError} onRetry={pcRefetch} />;
+  const isLoading = pcLoading || catLoading || itemsLoading;
 
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
-      <ScrollView showsVerticalScrollIndicator={false} bounces={false}>
-        {/* Hero */}
-        <HeroSection
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        bounces={true}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={colors.secondary.main}
+            colors={[colors.secondary.main]}
+          />
+        }
+        contentContainerStyle={{ paddingBottom: insets.bottom + 88 }}
+      >
+        {/* Page header */}
+        <PageHeader
           title={heroTitle}
-          overlineText="✦ EXPLORE OUR OFFERINGS ✦"
           subtitle={heroSubtitle}
-          variant="light"
-          height={280}
+          icon="restaurant-outline"
         />
+
+        {isLoading ? (
+          <View style={{ paddingHorizontal: spacing.base, paddingTop: spacing.xl }}>
+            {[1, 2, 3, 4].map((i) => (
+              <MenuItemSkeleton key={i} />
+            ))}
+          </View>
+        ) : (
+        <>
+        {/* ========== SEARCH BAR ========== */}
+        <View style={styles.searchBarContainer}>
+          <View style={styles.searchInputWrap}>
+            <Ionicons name="search" size={18} color={colors.text.muted} style={styles.searchIcon} />
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Search menu items..."
+              placeholderTextColor={colors.text.muted}
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              returnKeyType="search"
+              autoCapitalize="none"
+              clearButtonMode="while-editing"
+            />
+            {searchQuery.length > 0 && (
+              <TouchableOpacity onPress={() => setSearchQuery("")} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                <Ionicons name="close-circle" size={18} color={colors.text.muted} />
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
 
         {/* ========== PRIMARY CATEGORY TABS ========== */}
         <View style={styles.primaryTabsSection}>
@@ -277,7 +403,7 @@ export default function MenuScreen({ navigation, route }: any) {
                     styles.primaryTab,
                     isActive && styles.primaryTabActive,
                   ]}
-                  onPress={() => setSelectedPrimaryId(item.id)}
+                  onPress={() => { selection(); setSelectedPrimaryId(item.id); }}
                   activeOpacity={0.7}
                 >
                   <View
@@ -331,6 +457,38 @@ export default function MenuScreen({ navigation, route }: any) {
           />
         </View>
 
+        {/* ========== SEARCH RESULT COUNT ========== */}
+        {searchQuery.trim().length > 0 && !isLoading && (
+          <View style={styles.searchResultBar}>
+            <Text style={styles.searchResultText}>
+              {isDirectDisplay
+                ? directDisplayItems.length === 0
+                  ? `No results for "${searchQuery}"`
+                  : `${directDisplayItems.length} result${directDisplayItems.length !== 1 ? "s" : ""} for "${searchQuery}"`
+                : filteredMenu.length === 0
+                  ? `No results for "${searchQuery}"`
+                  : `${filteredMenu.reduce((sum, e) => sum + e.menuItems.length, 0)} item${filteredMenu.reduce((sum, e) => sum + e.menuItems.length, 0) !== 1 ? "s" : ""} found`}
+            </Text>
+            {(isDirectDisplay ? directDisplayItems.length === 0 : filteredMenu.length === 0) && (
+              <TouchableOpacity onPress={() => setSearchQuery("")} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                <Text style={styles.searchResultClear}>Clear</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
+
+        {/* ========== SEARCH EMPTY STATE ========== */}
+        {searchQuery.trim().length > 0 && !isLoading &&
+          (isDirectDisplay ? directDisplayItems.length === 0 : filteredMenu.length === 0) && (
+          <View style={styles.searchEmptyState}>
+            <Ionicons name="search-outline" size={40} color={colors.text.muted} />
+            <Text style={styles.searchEmptyTitle}>No items found</Text>
+            <Text style={styles.searchEmptyText}>
+              Try searching for something else, or browse a different category
+            </Text>
+          </View>
+        )}
+
         {/* ========== MENU CONTENT ========== */}
         {isDirectDisplay ? (
           /* Direct display for desserts/kids — floating card style */
@@ -338,14 +496,13 @@ export default function MenuScreen({ navigation, route }: any) {
             {directDisplayItems.map((item, idx) => {
               const colorScheme = CARD_COLORS[idx % CARD_COLORS.length];
               return (
-                <TouchableOpacity
+                <AnimatedCard
                   key={item.id}
-                  style={styles.categoryCard}
+                  index={idx}
                   onPress={() => {
                     setSelectedItem(item);
                     setShowItemModal(true);
                   }}
-                  activeOpacity={0.85}
                 >
                   {/* Floating Image */}
                   <View style={styles.categoryCardImageWrap}>
@@ -401,7 +558,7 @@ export default function MenuScreen({ navigation, route }: any) {
                       />
                     </View>
                   )}
-                </TouchableOpacity>
+                </AnimatedCard>
               );
             })}
           </View>
@@ -411,14 +568,13 @@ export default function MenuScreen({ navigation, route }: any) {
             {filteredMenu.map((entry, idx) => {
               const colorScheme = CARD_COLORS[idx % CARD_COLORS.length];
               return (
-                <TouchableOpacity
+                <AnimatedCard
                   key={entry.categoryId || idx.toString()}
-                  style={styles.categoryCard}
+                  index={idx}
                   onPress={() => {
                     setSelectedCategory(entry);
                     setShowCategoryModal(true);
                   }}
-                  activeOpacity={0.85}
                 >
                   {/* Floating Image */}
                   <View style={styles.categoryCardImageWrap}>
@@ -446,10 +602,12 @@ export default function MenuScreen({ navigation, route }: any) {
                     <Text style={styles.categoryCardName}>{entry.name}</Text>
                   </View>
 
-                  {/* Item count */}
-                  <Text style={styles.categoryCardCount}>
-                    {entry.menuItems.length} Items
-                  </Text>
+                  {/* Item count badge */}
+                  <View style={styles.categoryCardCountBadge}>
+                    <Text style={styles.categoryCardCount}>
+                      {entry.menuItems.length} Items
+                    </Text>
+                  </View>
 
                   {/* Explore indicator */}
                   <View style={styles.exploreRow}>
@@ -475,21 +633,15 @@ export default function MenuScreen({ navigation, route }: any) {
                       />
                     </View>
                   )}
-                </TouchableOpacity>
+                </AnimatedCard>
               );
             })}
           </View>
         )}
 
-        {/* Divider before footer */}
-        <View
-          style={{ paddingHorizontal: spacing.xl, paddingVertical: spacing.lg }}
-        >
-          <GoldDivider width="100%" />
-        </View>
+        </>
+        )}
 
-        {/* Footer */}
-        <Footer />
       </ScrollView>
 
       {/* ========== CATEGORY DETAIL MODAL (matching frontend Dialog) ========== */}
@@ -510,48 +662,61 @@ export default function MenuScreen({ navigation, route }: any) {
               onPress={() => setShowCategoryModal(false)}
             >
               <View style={styles.categoryModalCloseInner}>
-                <Ionicons name="close" size={22} color={colors.primary.dark} />
+                <Ionicons name="close" size={22} color="#FFFDFB" />
               </View>
             </TouchableOpacity>
 
-            {/* Decorative top accent bar */}
-            <View style={styles.categoryModalTopAccent}>
+            {/* Full-bleed image header */}
+            <View style={styles.categoryModalImageHeader}>
+              {selectedCategory?.mainImage ? (
+                <Image
+                  source={{ uri: getImageUrl(selectedCategory.mainImage) }}
+                  style={StyleSheet.absoluteFillObject}
+                  contentFit="cover"
+                  transition={300}
+                />
+              ) : (
+                <LinearGradient
+                  colors={[colors.primary.dark, colors.primary.main]}
+                  style={StyleSheet.absoluteFillObject}
+                />
+              )}
+              <LinearGradient
+                colors={["rgba(60,31,14,0.3)", "rgba(40,20,8,0.85)"]}
+                style={StyleSheet.absoluteFillObject}
+              />
+              <View style={styles.categoryModalImageHeaderContent}>
+                <View style={styles.categoryModalFlourish}>
+                  <LinearGradient
+                    colors={["transparent", "#D9A756"]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                    style={styles.flourishLine}
+                  />
+                  <View style={styles.flourishDot} />
+                  <LinearGradient
+                    colors={["#D9A756", "transparent"]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                    style={styles.flourishLine}
+                  />
+                </View>
+                <Text style={styles.categoryModalTitle}>
+                  {selectedCategory?.name}
+                </Text>
+                {selectedCategory?.description ? (
+                  <Text style={styles.categoryModalDesc}>
+                    {selectedCategory.description}
+                  </Text>
+                ) : null}
+              </View>
+              {/* Gold bottom accent */}
               <LinearGradient
                 colors={["transparent", "#D9A756", "transparent"]}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 0 }}
                 style={styles.categoryModalTopAccentLine}
               />
-            </View>
-
-            {/* Header */}
-            <View style={styles.categoryModalHeader}>
-              {/* Decorative flourish */}
-              <View style={styles.categoryModalFlourish}>
-                <LinearGradient
-                  colors={["transparent", "#D9A756"]}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 0 }}
-                  style={styles.flourishLine}
-                />
-                <View style={styles.flourishDot} />
-                <LinearGradient
-                  colors={["#D9A756", "transparent"]}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 0 }}
-                  style={styles.flourishLine}
-                />
-              </View>
-
-              <Text style={styles.categoryModalTitle}>
-                {selectedCategory?.name}
-              </Text>
-
-              {selectedCategory?.description ? (
-                <Text style={styles.categoryModalDesc}>
-                  {selectedCategory.description}
-                </Text>
-              ) : null}
             </View>
 
             {/* Menu Items list */}
@@ -682,7 +847,6 @@ export default function MenuScreen({ navigation, route }: any) {
                     colors={["transparent", "rgba(0,0,0,0.5)"]}
                     style={styles.itemModalImageOverlay}
                   />
-                  <CornerAccents size={14} />
                 </View>
               )}
 
@@ -781,7 +945,7 @@ export default function MenuScreen({ navigation, route }: any) {
       </Modal>
 
       {/* Floating call FAB */}
-      <FloatingCallButton />
+      <SocialFAB />
     </View>
   );
 }
@@ -794,6 +958,69 @@ const styles = StyleSheet.create({
   },
 
   /* -------- Primary Tabs -------- */
+  searchResultBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: spacing.base,
+    paddingBottom: spacing.sm,
+    paddingTop: 2,
+  },
+  searchResultText: {
+    fontFamily: typography.fontFamily.body,
+    fontSize: typography.fontSize.sm,
+    color: colors.text.muted,
+  },
+  searchResultClear: {
+    fontFamily: typography.fontFamily.bodyMedium,
+    fontSize: typography.fontSize.sm,
+    color: colors.secondary.main,
+  },
+  searchEmptyState: {
+    alignItems: "center",
+    paddingVertical: spacing["2xl"] * 2,
+    paddingHorizontal: spacing.xl,
+    gap: spacing.md,
+  },
+  searchEmptyTitle: {
+    fontFamily: typography.fontFamily.heading,
+    fontSize: typography.fontSize.xl,
+    color: colors.text.primary,
+  },
+  searchEmptyText: {
+    fontFamily: typography.fontFamily.body,
+    fontSize: typography.fontSize.base,
+    color: colors.text.muted,
+    textAlign: "center",
+    lineHeight: typography.fontSize.base * 1.6,
+  },
+  searchBarContainer: {
+    paddingHorizontal: spacing.base,
+    paddingTop: spacing.base,
+    paddingBottom: spacing.sm,
+    backgroundColor: colors.background.default,
+  },
+  searchInputWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: colors.background.paper,
+    borderWidth: 1,
+    borderColor: colors.border.gold,
+    borderRadius: borderRadius.full,
+    paddingHorizontal: spacing.base,
+    paddingVertical: spacing.sm,
+    gap: spacing.sm,
+  },
+  searchIcon: {
+    flexShrink: 0,
+  },
+  searchInput: {
+    flex: 1,
+    fontFamily: typography.fontFamily.body,
+    fontSize: typography.fontSize.base,
+    color: colors.text.primary,
+    padding: 0,
+  },
   primaryTabsSection: {
     backgroundColor: colors.background.default,
     paddingVertical: spacing.lg,
@@ -857,6 +1084,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.base,
     paddingVertical: spacing.xl,
     alignItems: "center",
+    position: "relative",
+    overflow: "hidden",
   },
   categoryCard: {
     alignItems: "center",
@@ -907,14 +1136,21 @@ const styles = StyleSheet.create({
     textAlign: "center",
     lineHeight: 42,
   },
-  categoryCardCount: {
-    fontFamily: typography.fontFamily.bodyMedium,
-    fontSize: typography.fontSize.base,
-    color: "#8B7355",
-    letterSpacing: 3,
-    textTransform: "uppercase",
-    opacity: 0.85,
+  categoryCardCountBadge: {
+    borderWidth: 1,
+    borderColor: "rgba(217,167,86,0.35)",
+    borderRadius: 20,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 4,
     marginBottom: spacing.sm,
+    backgroundColor: "rgba(217,167,86,0.07)",
+  },
+  categoryCardCount: {
+    fontFamily: typography.fontFamily.bodySemibold,
+    fontSize: typography.fontSize.xs,
+    color: colors.secondary.main,
+    letterSpacing: 2,
+    textTransform: "uppercase",
   },
   exploreRow: {
     flexDirection: "row",
@@ -974,19 +1210,19 @@ const styles = StyleSheet.create({
   },
   categoryModalClose: {
     position: "absolute",
-    top: 12,
-    right: 12,
+    top: 16,
+    right: 16,
     zIndex: 20,
   },
   categoryModalCloseInner: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: "rgba(255,255,255,0.9)",
+    backgroundColor: "rgba(40,20,8,0.65)",
     justifyContent: "center",
     alignItems: "center",
     borderWidth: 1,
-    borderColor: colors.border.gold,
+    borderColor: "rgba(217,167,86,0.4)",
     ...shadows.sm,
   },
   categoryModalTopAccent: {
@@ -994,9 +1230,21 @@ const styles = StyleSheet.create({
     paddingTop: spacing.xs,
   },
   categoryModalTopAccentLine: {
-    width: 200,
-    height: 4,
-    borderRadius: 2,
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 2,
+  },
+  categoryModalImageHeader: {
+    height: 180,
+    position: "relative",
+    overflow: "hidden",
+    justifyContent: "flex-end",
+  },
+  categoryModalImageHeaderContent: {
+    padding: spacing.xl,
+    paddingBottom: spacing.lg,
   },
   categoryModalHeader: {
     paddingHorizontal: spacing.xl,
@@ -1025,21 +1273,24 @@ const styles = StyleSheet.create({
   },
   categoryModalTitle: {
     fontFamily: typography.fontFamily.heading,
-    fontSize: 28,
-    color: "#4A2C17",
+    fontSize: 30,
+    color: "#FFFDFB",
     textAlign: "center",
     letterSpacing: 2,
     textTransform: "uppercase",
-    lineHeight: 34,
+    lineHeight: 36,
+    textShadowColor: "rgba(0,0,0,0.4)",
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 8,
   },
   categoryModalDesc: {
     fontFamily: typography.fontFamily.headingMedium,
-    fontSize: typography.fontSize.base,
-    color: colors.text.muted,
+    fontSize: typography.fontSize.sm,
+    color: "rgba(255,253,251,0.8)",
     fontStyle: "italic",
     textAlign: "center",
     marginTop: spacing.sm,
-    lineHeight: 24,
+    lineHeight: 22,
     letterSpacing: 0.3,
   },
   categoryModalScroll: {

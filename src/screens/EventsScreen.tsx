@@ -14,6 +14,7 @@ import {
   TouchableOpacity,
   Linking,
   Animated,
+  RefreshControl,
 } from "react-native";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
@@ -36,13 +37,12 @@ import {
   GlassCard,
   ErrorView,
   GoldButton,
-  CornerAccents,
-  AnimatedBackground,
-} from "../components/common/SharedComponents";
-import HeroSection from "../components/common/HeroSection";
-import Footer from "../components/common/Footer";
-import FloatingCallButton from "../components/common/FloatingCallButton";
-import LoadingScreen from "../components/common/LoadingScreen";
+} from "../components/common";
+import PageHeader from "../components/common/PageHeader";
+import SocialFAB from "../components/common/SocialFAB";
+import { EventCardSkeleton } from "../components/common/SkeletonLoader";
+import { useShare } from "../hooks/useShare";
+import * as Haptics from "expo-haptics";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
@@ -258,6 +258,7 @@ const EventItem = ({
   index?: number;
 }) => {
   const [expanded, setExpanded] = useState(false);
+  const { shareEvent } = useShare();
   const color = isPast ? colors.primary.light : getEventColor(event.type);
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(30)).current;
@@ -330,7 +331,6 @@ const EventItem = ({
               {getEventMonth(event.eventStartDate)}
             </Text>
           </LinearGradient>
-          <CornerAccents size={10} color={color} />
           {/* Decorative frame border inside image */}
           <View
             style={[styles.eventImageFrame, { borderColor: `${color}40` }]}
@@ -411,6 +411,17 @@ const EventItem = ({
 
           {/* Action buttons */}
           <View style={styles.eventActions}>
+            <TouchableOpacity
+              style={styles.shareBtn}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                shareEvent(event.title, event.description, formatEventDate(event.eventStartDate));
+              }}
+              activeOpacity={0.8}
+              hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+            >
+              <Ionicons name="share-social-outline" size={18} color={color} />
+            </TouchableOpacity>
             {event.ticketLink && (
               <TouchableOpacity
                 style={styles.eventTicketBtn}
@@ -483,6 +494,7 @@ const EventItem = ({
 // ═══════════════════════════════════════════════════════════════════
 export default function EventsScreen({ navigation }: any) {
   const insets = useSafeAreaInsets();
+  const [refreshing, setRefreshing] = useState(false);
 
   const {
     data: eventsData,
@@ -492,6 +504,12 @@ export default function EventsScreen({ navigation }: any) {
   } = useApiWithCache<Event[]>("all-events-page", () =>
     eventsService.getAllEvents(),
   );
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await refetch();
+    setRefreshing(false);
+  }, [refetch]);
 
   const { upcomingEvents, pastEvents } = useMemo(() => {
     if (!eventsData)
@@ -545,31 +563,38 @@ export default function EventsScreen({ navigation }: any) {
     navigation.navigate("ContactTab");
   }, [navigation]);
 
-  if (loading) return <LoadingScreen />;
   if (error) return <ErrorView message={error} onRetry={refetch} />;
 
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
-      <ScrollView showsVerticalScrollIndicator={false} bounces={false}>
-        {/* Hero */}
-        <HeroSection
-          title="Discover Events"
-          overlineText="✦ WHAT'S HAPPENING ✦"
-          subtitle="From trivia nights to game days, there's always something happening at The Brooklin Pub. Pull up a chair."
-          variant="light"
-          height={280}
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        bounces={true}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={colors.secondary.main}
+            colors={[colors.secondary.main]}
+          />
+        }
+        contentContainerStyle={{ paddingBottom: insets.bottom + 88 }}
+      >
+        {/* Page header */}
+        <PageHeader
+          title="Events"
+          subtitle="Trivia nights, live music, game days & more"
+          icon="calendar-outline"
         />
 
-        {/* ════ Section Header ════ */}
-        <View style={styles.sectionHeaderWrap}>
-          <GoldDivider width={80} marginVertical={spacing.sm} />
-          <Text style={styles.sectionOverline}>◆ Mark Your Calendar ◆</Text>
-          <Text style={styles.sectionTitle}>
-            Featured{" "}
-            <Text style={{ color: colors.secondary.main }}>Experiences</Text>
-          </Text>
-          <GoldDivider width={120} marginVertical={spacing.md} />
-        </View>
+        {loading ? (
+          <View style={styles.skeletonContainer}>
+            {[1, 2, 3].map((i) => (
+              <EventCardSkeleton key={i} />
+            ))}
+          </View>
+        ) : (
+          <>
 
         {/* ════ Upcoming Events ════ */}
         {upcomingEvents.length === 0 && pastEvents.length === 0 ? (
@@ -632,20 +657,7 @@ export default function EventsScreen({ navigation }: any) {
             {pastEvents.length > 0 && (
               <View style={styles.pastSection}>
                 <View style={styles.sectionHeaderWrap}>
-                  <GoldDivider width={80} marginVertical={spacing.sm} />
-                  <Text
-                    style={[
-                      styles.sectionOverline,
-                      { color: colors.primary.light },
-                    ]}
-                  >
-                    ◆ Past Memories ◆
-                  </Text>
-                  <Text style={styles.sectionTitle}>
-                    Previous{" "}
-                    <Text style={{ color: colors.primary.light }}>Events</Text>
-                  </Text>
-                  <GoldDivider width={120} marginVertical={spacing.md} />
+                  <Text style={styles.sectionTitle}>Past Events</Text>
                 </View>
 
                 {Object.entries(pastByMonth).map(([monthYear, events]) => (
@@ -693,21 +705,11 @@ export default function EventsScreen({ navigation }: any) {
           </>
         )}
 
-        {/* ════ Decorative "More Events Coming Soon" ════ */}
-        <View style={styles.moreComingSoon}>
-          <View style={styles.moreComingLine} />
-          <View style={styles.moreComingDiamond} />
-          <Text style={styles.moreComingText}>More Events Coming Soon</Text>
-          <View style={styles.moreComingDiamond} />
-          <View style={styles.moreComingLine} />
-        </View>
-
         {/* ════ Host Your Event ════ */}
         <LinearGradient
           colors={["#F5EBE0", "#E8D5C4", "#DBC7B0"]}
           style={styles.hostSection}
         >
-          <AnimatedBackground variant="light" particleCount={8} />
           <Text style={styles.hostOverline}>◆ Book Brooklin Pub ◆</Text>
           <Text style={styles.hostTitle}>
             Host Your Next{" "}
@@ -790,12 +792,13 @@ export default function EventsScreen({ navigation }: any) {
             </View>
           </GlassCard>
         </LinearGradient>
+          </>
+        )}
 
-        <Footer />
       </ScrollView>
 
       {/* Floating call FAB */}
-      <FloatingCallButton />
+      <SocialFAB />
     </View>
   );
 }
@@ -807,6 +810,10 @@ const styles = StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: colors.background.default,
+  },
+  skeletonContainer: {
+    paddingHorizontal: spacing.base,
+    paddingTop: spacing.xl,
   },
 
   /* Section header */
@@ -844,8 +851,9 @@ const styles = StyleSheet.create({
   },
   monthTitle: {
     fontFamily: typography.fontFamily.heading,
-    fontSize: typography.fontSize.xl,
+    fontSize: 22,
     color: colors.primary.dark,
+    letterSpacing: -0.2,
   },
   monthLine: {
     flex: 1,
@@ -994,6 +1002,17 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     flexWrap: "wrap",
     gap: spacing.md,
+    alignItems: "center",
+  },
+  shareBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: colors.border.gold,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: colors.glass.gold,
   },
   eventTicketBtn: {
     borderRadius: borderRadius.full,
@@ -1072,6 +1091,7 @@ const styles = StyleSheet.create({
   /* Past section */
   pastSection: {
     marginTop: spacing.xl,
+    opacity: 0.75,
   },
 
   /* More coming soon */
