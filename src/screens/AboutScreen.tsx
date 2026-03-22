@@ -1,23 +1,18 @@
-import React, {
-  useState,
-  useEffect,
-  useRef,
-  useCallback,
-  useMemo,
-} from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
-  Dimensions,
   TouchableOpacity,
   Animated,
-  PanResponder,
   RefreshControl,
+  useWindowDimensions,
+  FlatList,
 } from "react-native";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
+import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   colors,
@@ -30,427 +25,123 @@ import { useApiWithCache } from "../hooks/useApi";
 import { storiesService } from "../services/stories.service";
 import { getImageUrl } from "../services/api";
 import type { StoryCategory } from "../types/api.types";
-import { GoldDivider, ErrorView } from "../components/common";
-import PageHeader from "../components/common/PageHeader";
-import AppBrandStrip from "../components/common/AppBrandStrip";
+import { ErrorView } from "../components/common";
+import SocialFAB from "../components/common/SocialFAB";
+import { CONTACT_INFO, EXTERNAL_URLS } from "../config/constants";
+import { Linking } from "react-native";
 
-const { width: SCREEN_WIDTH } = Dimensions.get("window");
+// ─── Fallback story slides ────────────────────────────────────────────────────
 
-/* ─── Fallback slides when API has no stories ─── */
 const FALLBACK_SLIDES = [
   {
-    id: "fallback-1",
+    id: "fb-1",
     title: "Our Story",
-    subtitle:
-      "Serving Brooklin since 2014\u2014where neighbours become friends and every visit feels like coming home.",
+    subtitle: "Serving Brooklin since 2014 — where neighbours become friends.",
     image: require("../assets/images/story/Brookli-pub-front-view.jpg"),
   },
   {
-    id: "fallback-2",
+    id: "fb-2",
     title: "The Pub",
-    subtitle:
-      "More than a restaurant\u2014we're where memories are made, from first dates to family celebrations.",
+    subtitle: "More than a restaurant — we're where memories are made.",
     image: require("../assets/images/story/brooklin-pub-indoor-view.jpg"),
   },
   {
-    id: "fallback-3",
+    id: "fb-3",
     title: "Our Lounge",
-    subtitle:
-      "Relax, unwind, and enjoy crafted drinks in a warm lounge atmosphere.",
+    subtitle: "Relax, unwind, and enjoy crafted drinks in a warm atmosphere.",
     image: require("../assets/images/story/brooklin-pub-eligent.jpg"),
   },
   {
-    id: "fallback-4",
+    id: "fb-4",
     title: "Community First",
-    subtitle:
-      "We're woven into Brooklin's fabric\u2014sponsoring local teams and always keeping a seat for you.",
+    subtitle: "Woven into Brooklin's fabric — always keeping a seat for you.",
     image: require("../assets/images/story/brooklin-pub-dancing-in-function 1.jpg"),
-  },
-  {
-    id: "fallback-5",
-    title: "Join the Family",
-    subtitle:
-      "Pull up a chair and stay awhile. First visit or hundredth\u2014you're always welcome here.",
-    image: require("../assets/images/story/brooklin-pub-show-case.jpg"),
   },
 ];
 
-/* ─── Random direction helper (matches frontend AnimatePresence directions) ─── */
-const DIRECTIONS = ["left", "right", "top", "bottom"] as const;
-type Direction = (typeof DIRECTIONS)[number];
+// ─── Gallery images ───────────────────────────────────────────────────────────
 
-const getRandomDirection = (): Direction =>
-  DIRECTIONS[Math.floor(Math.random() * DIRECTIONS.length)];
+const GALLERY_IMAGES = [
+  require("../assets/images/landing/item1.jpg"),
+  require("../assets/images/landing/item2.jpg"),
+  require("../assets/images/landing/item3.jpg"),
+  require("../assets/images/landing/item4.jpg"),
+  require("../assets/images/landing/item5.jpg"),
+  require("../assets/images/landing/item6.jpg"),
+];
 
-const getDirectionOffset = (
-  dir: Direction,
-  magnitude: number,
-): { translateX: number; translateY: number } => {
-  switch (dir) {
-    case "left":
-      return { translateX: -magnitude, translateY: 0 };
-    case "right":
-      return { translateX: magnitude, translateY: 0 };
-    case "top":
-      return { translateX: 0, translateY: -magnitude };
-    case "bottom":
-      return { translateX: 0, translateY: magnitude };
-  }
-};
+// ─── Story Carousel ──────────────────────────────────────────────────────────
 
-/* ─── About slideshow component (matches frontend AboutUs mobile) ─── */
-const AboutSlideshow = ({
+const StoryCarousel = ({
   slides,
 }: {
-  slides: Array<{
-    id: string;
-    title: string;
-    subtitle: string;
-    image: any;
-  }>;
+  slides: Array<{ id: string; title: string; subtitle: string; image: any }>;
 }) => {
+  const { width: screenWidth } = useWindowDimensions();
   const [activeIndex, setActiveIndex] = useState(0);
   const fadeAnim = useRef(new Animated.Value(1)).current;
-  const slideXAnim = useRef(new Animated.Value(0)).current;
-  const slideYAnim = useRef(new Animated.Value(0)).current;
-  const imageScale = useRef(new Animated.Value(0.9)).current;
-  const directionRef = useRef<Direction>("right");
 
-  const animateTransition = useCallback(
-    (nextIndex: number) => {
-      const exitDir = getRandomDirection();
-      const exitOffset = getDirectionOffset(exitDir, 40);
-
-      // Animate out in random direction
-      Animated.parallel([
-        Animated.timing(fadeAnim, {
-          toValue: 0,
-          duration: 300,
-          useNativeDriver: true,
-        }),
-        Animated.timing(slideXAnim, {
-          toValue: exitOffset.translateX,
-          duration: 300,
-          useNativeDriver: true,
-        }),
-        Animated.timing(slideYAnim, {
-          toValue: exitOffset.translateY,
-          duration: 300,
-          useNativeDriver: true,
-        }),
-      ]).start(() => {
-        setActiveIndex(nextIndex);
-
-        // Enter from opposite random direction
-        const enterDir = getRandomDirection();
-        directionRef.current = enterDir;
-        const enterOffset = getDirectionOffset(enterDir, 40);
-        slideXAnim.setValue(-enterOffset.translateX);
-        slideYAnim.setValue(-enterOffset.translateY);
-        imageScale.setValue(0.88);
-
-        Animated.parallel([
-          Animated.timing(fadeAnim, {
-            toValue: 1,
-            duration: 500,
-            useNativeDriver: true,
-          }),
-          Animated.timing(slideXAnim, {
-            toValue: 0,
-            duration: 500,
-            useNativeDriver: true,
-          }),
-          Animated.timing(slideYAnim, {
-            toValue: 0,
-            duration: 500,
-            useNativeDriver: true,
-          }),
-          Animated.spring(imageScale, {
-            toValue: 1,
-            tension: 50,
-            friction: 7,
-            useNativeDriver: true,
-          }),
-        ]).start();
+  const goTo = useCallback(
+    (idx: number) => {
+      Animated.timing(fadeAnim, { toValue: 0, duration: 250, useNativeDriver: true }).start(() => {
+        setActiveIndex(idx);
+        Animated.timing(fadeAnim, { toValue: 1, duration: 400, useNativeDriver: true }).start();
       });
     },
-    [fadeAnim, slideXAnim, slideYAnim, imageScale],
+    [fadeAnim],
   );
 
   useEffect(() => {
     if (slides.length <= 1) return;
     const interval = setInterval(() => {
-      const next = (activeIndex + 1) % slides.length;
-      animateTransition(next);
-    }, 3000);
+      goTo((activeIndex + 1) % slides.length);
+    }, 5000);
     return () => clearInterval(interval);
-  }, [slides.length, activeIndex, animateTransition]);
-
-  // Reset image scale for entrance
-  useEffect(() => {
-    imageScale.setValue(0.9);
-    Animated.spring(imageScale, {
-      toValue: 1,
-      tension: 50,
-      friction: 7,
-      useNativeDriver: true,
-    }).start();
-  }, [activeIndex]);
+  }, [slides.length, activeIndex, goTo]);
 
   const current = slides[activeIndex];
-  if (!current) return null;
+  const heroH = Math.min(screenWidth * 0.75, 380);
 
   return (
-    <View style={styles.slideshowSection}>
-      {/* Light cream background matching frontend */}
-      <View style={styles.slideshowContainer}>
-        {/* Image with gradient border frame - matches frontend mobile */}
-        <Animated.View
-          style={[
-            styles.slideImageWrapper,
-            {
-              opacity: fadeAnim,
-              transform: [
-                { scale: imageScale },
-                { translateX: slideXAnim },
-                { translateY: slideYAnim },
-              ],
-            },
-          ]}
-        >
-          <LinearGradient
-            colors={[
-              "rgba(217, 167, 86, 0.6)",
-              "rgba(106, 58, 30, 0.4)",
-              "rgba(217, 167, 86, 0.6)",
-            ]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.slideImageBorder}
-          >
-            <View style={styles.slideImageInner}>
-              <Image
-                source={current.image}
-                style={styles.slideImage}
-                contentFit="cover"
-                transition={400}
-              />
-            </View>
-          </LinearGradient>
-          {/* Subtle glow behind image */}
-          <View style={styles.slideImageGlow} />
+    <View>
+      {/* Hero image */}
+      <View style={[styles.storyHero, { height: heroH }]}>
+        <Animated.View style={[StyleSheet.absoluteFillObject, { opacity: fadeAnim }]}>
+          <Image source={current.image} style={StyleSheet.absoluteFillObject} contentFit="cover" transition={0} />
         </Animated.View>
-
-        {/* Text content */}
-        <Animated.View
-          style={[
-            styles.slideTextContent,
-            {
-              opacity: fadeAnim,
-              transform: [
-                { translateX: slideXAnim },
-                { translateY: slideYAnim },
-              ],
-            },
-          ]}
-        >
-          <Text style={styles.slideTitle}>{current.title}</Text>
-          <Text style={styles.slideSubtitle}>{current.subtitle}</Text>
-        </Animated.View>
-
-        {/* Vertical pagination dots on right */}
-        {slides.length > 1 && (
-          <View style={styles.slidePagination}>
-            {slides.map((_, i) => (
-              <TouchableOpacity
-                key={i}
-                onPress={() => animateTransition(i)}
-                hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-              >
-                <View
-                  style={[
-                    styles.slideDot,
-                    i === activeIndex && styles.slideDotActive,
-                  ]}
-                />
-              </TouchableOpacity>
-            ))}
-          </View>
-        )}
-      </View>
-    </View>
-  );
-};
-
-/* ─── Gallery Row (matches frontend Gallery mobile) ─── */
-interface GalleryRowData {
-  title: string;
-  description: string;
-  images: string[];
-}
-
-const GalleryRowMobile = ({
-  row,
-  isLast,
-}: {
-  row: GalleryRowData;
-  isLast: boolean;
-}) => {
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const fadeAnim = useRef(new Animated.Value(1)).current;
-  const scaleAnim = useRef(new Animated.Value(1)).current;
-
-  // Auto-cycle every 2.5s
-  useEffect(() => {
-    if (row.images.length <= 1) return;
-    const interval = setInterval(() => {
-      Animated.parallel([
-        Animated.timing(fadeAnim, {
-          toValue: 0,
-          duration: 250,
-          useNativeDriver: true,
-        }),
-        Animated.timing(scaleAnim, {
-          toValue: 1.05,
-          duration: 250,
-          useNativeDriver: true,
-        }),
-      ]).start(() => {
-        setCurrentIndex((prev) => (prev + 1) % row.images.length);
-        scaleAnim.setValue(1);
-        Animated.timing(fadeAnim, {
-          toValue: 1,
-          duration: 400,
-          useNativeDriver: true,
-        }).start();
-      });
-    }, 2500);
-    return () => clearInterval(interval);
-  }, [row.images.length]);
-
-  // Swipe gesture
-  const panResponder = useMemo(
-    () =>
-      PanResponder.create({
-        onMoveShouldSetPanResponder: (_, gesture) =>
-          Math.abs(gesture.dx) > 20 && Math.abs(gesture.dy) < 40,
-        onPanResponderRelease: (_, gesture) => {
-          if (gesture.dx < -50 && currentIndex < row.images.length - 1) {
-            setCurrentIndex((prev) => prev + 1);
-          } else if (gesture.dx > 50 && currentIndex > 0) {
-            setCurrentIndex((prev) => prev - 1);
-          }
-        },
-      }),
-    [currentIndex, row.images.length],
-  );
-
-  // Progress dot sliding window (show max 5)
-  const getVisibleDots = useCallback(() => {
-    const total = row.images.length;
-    if (total <= 5) return row.images.map((_, i) => i);
-    const indices: number[] = [];
-    for (let i = -2; i <= 2; i++) {
-      let idx = currentIndex + i;
-      if (idx < 0) idx += total;
-      if (idx >= total) idx -= total;
-      indices.push(idx);
-    }
-    return indices;
-  }, [currentIndex, row.images.length]);
-
-  return (
-    <View
-      style={[styles.galleryRow, !isLast && { marginBottom: spacing["2xl"] }]}
-    >
-      {/* Glassmorphic Title Card */}
-      <View style={styles.galleryTitleCard}>
-        <View style={styles.galleryTitleGoldLine} />
-        {/* Decorative glow */}
-        <View style={styles.galleryTitleDecor} />
-        <Text style={styles.galleryTitleText}>{row.title}</Text>
-        <Text style={styles.galleryDescText}>{row.description}</Text>
-      </View>
-
-      {/* Image Container with swipe */}
-      <View style={styles.galleryImageContainer} {...panResponder.panHandlers}>
-        <Animated.View
-          style={[
-            styles.galleryImageInner,
-            { opacity: fadeAnim, transform: [{ scale: scaleAnim }] },
-          ]}
-        >
-          {row.images[currentIndex] && (
-            <Image
-              source={{ uri: row.images[currentIndex] }}
-              style={styles.galleryFullImage}
-              contentFit="cover"
-              transition={300}
-            />
-          )}
-        </Animated.View>
-
-        {/* Bottom gradient overlay */}
         <LinearGradient
-          colors={["transparent", "rgba(74,44,23,0.4)"]}
-          style={styles.galleryImageBottomGrad}
-        />
-        {/* Top gradient overlay */}
-        <LinearGradient
-          colors={["rgba(217,167,86,0.15)", "transparent"]}
-          style={styles.galleryImageTopGrad}
+          colors={["transparent", "rgba(26,13,10,0.85)"]}
+          style={StyleSheet.absoluteFillObject}
         />
 
-        {/* Image Counter Badge */}
-        <View style={styles.galleryCounterBadge}>
-          <Text style={styles.galleryCounterText}>
-            {currentIndex + 1} / {row.images.length}
-          </Text>
-        </View>
-      </View>
+        {/* Content */}
+        <Animated.View style={[styles.storyContent, { opacity: fadeAnim }]}>
+          <Text style={styles.storyTitle}>{current.title}</Text>
+          <Text style={styles.storySubtitle}>{current.subtitle}</Text>
+        </Animated.View>
 
-      {/* Progress Ring Pagination */}
-      {row.images.length > 1 && (
-        <View style={styles.galleryPagination}>
-          {getVisibleDots().map((idx) => (
-            <TouchableOpacity
-              key={idx}
-              onPress={() => setCurrentIndex(idx)}
-              activeOpacity={0.7}
-            >
-              <View style={styles.progressDotOuter}>
-                {/* Background ring */}
-                <View style={styles.progressDotRing} />
-                {/* Active ring */}
-                {idx === currentIndex && (
-                  <View style={styles.progressDotRingActive} />
-                )}
-                {/* Inner dot */}
-                <View
-                  style={[
-                    styles.progressDotInner,
-                    idx === currentIndex && styles.progressDotInnerActive,
-                  ]}
-                />
-              </View>
+        {/* Dots */}
+        <View style={styles.storyDots}>
+          {slides.map((_, i) => (
+            <TouchableOpacity key={i} onPress={() => goTo(i)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+              <View style={[styles.dot, i === activeIndex && styles.dotActive]} />
             </TouchableOpacity>
           ))}
         </View>
-      )}
+      </View>
     </View>
   );
 };
 
-/* ═══════════════════════════════════════════════════════ */
-/* MAIN SCREEN                                           */
-/* ═══════════════════════════════════════════════════════ */
-export default function AboutScreen() {
+// ─── Main Screen ──────────────────────────────────────────────────────────────
+
+export default function AboutScreen({ navigation }: any) {
   const insets = useSafeAreaInsets();
+  const { width: screenWidth } = useWindowDimensions();
   const [refreshing, setRefreshing] = useState(false);
 
-  // Fetch story categories
   const {
-    data: categories,
+    data: storyCategories,
     loading,
     error,
     refetch,
@@ -458,74 +149,39 @@ export default function AboutScreen() {
     storiesService.getAllCategories(),
   );
 
-  // Build slides for AboutUs slideshow
-  const activeCategories = useMemo(
-    () =>
-      categories?.filter(
-        (c) => c.isActive && c.stories && c.stories.length > 0,
-      ) ?? [],
-    [categories],
-  );
-
-  const allStories = useMemo(
-    () => activeCategories.flatMap((c) => c.stories ?? []),
-    [activeCategories],
-  );
-
-  // Build slides from API data or use fallbacks
-  const slides = useMemo(() => {
-    if (allStories.length > 0) {
-      return allStories.map((story) => ({
-        id: story.id,
-        title: story.title,
-        subtitle: story.content,
-        image: story.imageUrls?.[0]
-          ? { uri: getImageUrl(story.imageUrls[0]) }
-          : require("../assets/images/story/Brookli-pub-front-view.jpg"),
-      }));
-    }
-    return FALLBACK_SLIDES;
-  }, [allStories]);
-
-  // Build gallery rows from categories
-  const galleryRows: GalleryRowData[] = useMemo(() => {
-    if (!categories) return [];
-    return categories
-      .filter((c) => c.isActive)
-      .sort((a, b) => a.sortOrder - b.sortOrder)
-      .map((category) => {
-        const images = (category.stories || [])
-          .filter((s) => s.isActive && s.imageUrls && s.imageUrls.length > 0)
-          .sort((a, b) => a.sortOrder - b.sortOrder)
-          .flatMap(
-            (s) =>
-              s.imageUrls
-                .map((url) => getImageUrl(url))
-                .filter(Boolean) as string[],
-          );
-        return {
-          title: category.name,
-          description: category.description || "",
-          images,
-        };
-      })
-      .filter((row) => row.images.length > 0);
-  }, [categories]);
-
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     await refetch();
     setRefreshing(false);
   }, [refetch]);
 
-  if (error) return <ErrorView message={error} onRetry={refetch} />;
+  // Build slides from API or fallback
+  const slides = (() => {
+    if (!storyCategories || storyCategories.length === 0) return FALLBACK_SLIDES;
+    const apiSlides: typeof FALLBACK_SLIDES = [];
+    for (const cat of storyCategories) {
+      if (!cat.isActive) continue;
+      for (const story of cat.stories ?? []) {
+        if (!story.isActive) continue;
+        const img = story.imageUrls?.[0];
+        apiSlides.push({
+          id: story.id,
+          title: story.title,
+          subtitle: story.content ? (story.content.slice(0, 120) + (story.content.length > 120 ? "…" : "")) : "",
+          image: img ? { uri: getImageUrl(img) } : FALLBACK_SLIDES[0].image,
+        });
+      }
+    }
+    return apiSlides.length > 0 ? apiSlides : FALLBACK_SLIDES;
+  })();
+
+  const galleryThumbSize = (screenWidth - spacing.base * 2 - spacing.sm * 2) / 3;
 
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
       <ScrollView
         showsVerticalScrollIndicator={false}
-        bounces={true}
-        contentContainerStyle={{ paddingBottom: insets.bottom + 88 }}
+        contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -535,454 +191,305 @@ export default function AboutScreen() {
           />
         }
       >
-        <PageHeader
-          title="About Us"
-          subtitle="A local favourite since 2014"
-          icon="information-circle-outline"
-        />
-
-        {/* ═══ Auto-Rotating Slideshow (AboutUs) ═══ */}
-        <AboutSlideshow slides={slides} />
-
-        {/* ═══ "A Glimpse Inside" Gallery Section ═══ */}
-        {galleryRows.length > 0 && (
-          <LinearGradient
-            colors={["#FDF8F3", "#F5EBE0", "#E8D5C4", "#F5EBE0", "#FDF8F3"]}
-            style={styles.gallerySectionGradient}
-          >
-            {/* Section Header */}
-            <View style={styles.gallerySectionHeader}>
-              <Text style={styles.gallerySectionTitle}>A Glimpse Inside</Text>
-
-              <Text style={styles.gallerySectionDesc}>
-                A cornerstone of Whitby since 2014 — great food, warm
-                atmosphere, and always a place where everyone belongs.
-              </Text>
-
-              <View style={styles.galleryHeaderDivider} />
-            </View>
-
-            {/* Gallery Rows */}
-            {galleryRows.map((row, i) => (
-              <GalleryRowMobile
-                key={i}
-                row={row}
-                isLast={i === galleryRows.length - 1}
-              />
-            ))}
-          </LinearGradient>
-        )}
-
-        {/* ═══ "Since 2014" Section ═══ */}
-        <View style={styles.sinceSection}>
-          <LinearGradient
-            colors={[colors.background.dark, "#2A1509", colors.background.dark]}
-            style={styles.sinceGradient}
-          >
-            <Text style={styles.sinceOverline}>A LOCAL FAVORITE</Text>
-            <Text style={styles.sinceTitle}>Since 2014</Text>
-            <GoldDivider width="30%" marginVertical={spacing.md} />
-            <Text style={styles.sinceText}>
-              For over a decade, Brooklin Pub & Grill has been the heart of the
-              community. From our signature dishes to live entertainment, we
-              pride ourselves on providing a warm, welcoming atmosphere for
-              everyone.
-            </Text>
-            <View style={styles.sinceStats}>
-              <View style={styles.sinceStat}>
-                <Text style={styles.sinceStatNumber}>10+</Text>
-                <Text style={styles.sinceStatLabel}>Years</Text>
-              </View>
-              <View style={styles.sinceStatDivider} />
-              <View style={styles.sinceStat}>
-                <Text style={styles.sinceStatNumber}>100+</Text>
-                <Text style={styles.sinceStatLabel}>Menu Items</Text>
-              </View>
-              <View style={styles.sinceStatDivider} />
-              <View style={styles.sinceStat}>
-                <Text style={styles.sinceStatNumber}>1000+</Text>
-                <Text style={styles.sinceStatLabel}>Happy Guests</Text>
-              </View>
-            </View>
-          </LinearGradient>
+        {/* ── Header ── */}
+        <View style={styles.header}>
+          <Text style={styles.headerTitle}>About Us</Text>
+          <Text style={styles.headerSubtitle}>Brooklin Pub & Grill since 2014</Text>
         </View>
 
-        <AppBrandStrip />
+        {/* ── Story Carousel ── */}
+        <StoryCarousel slides={slides} />
+
+        {/* ── Quick facts ── */}
+        <View style={styles.factsRow}>
+          {[
+            { icon: "calendar" as const, label: "Since", value: "2014" },
+            { icon: "location" as const, label: "Location", value: "Whitby, ON" },
+            { icon: "people" as const, label: "Community", value: "First" },
+          ].map(({ icon, label, value }) => (
+            <View key={label} style={styles.factItem}>
+              <View style={styles.factIcon}>
+                <Ionicons name={icon} size={18} color={colors.secondary.main} />
+              </View>
+              <Text style={styles.factValue}>{value}</Text>
+              <Text style={styles.factLabel}>{label}</Text>
+            </View>
+          ))}
+        </View>
+
+        {/* ── About Copy ── */}
+        <View style={styles.section}>
+          <Text style={styles.sectionOverline}>Our Philosophy</Text>
+          <Text style={styles.sectionTitle}>More Than a Meal</Text>
+          <Text style={styles.body}>
+            At Brooklin Pub & Grill, we believe great food is just the beginning. Since opening
+            our doors in 2014, we've been a cornerstone of the Brooklin community — a place where
+            neighbours become friends and every visit feels like coming home.
+          </Text>
+          <Text style={[styles.body, { marginTop: spacing.base }]}>
+            We craft our menu with fresh, locally sourced ingredients and a passion for bold
+            flavours. Whether you're here for a quick lunch, a family dinner, or a late-night
+            celebration, we make every moment count.
+          </Text>
+        </View>
+
+        {/* ── Gallery strip ── */}
+        <View style={styles.gallerySection}>
+          <View style={styles.sectionHeaderRow}>
+            <Text style={styles.sectionTitle}>Gallery</Text>
+          </View>
+          <View style={styles.galleryGrid}>
+            {GALLERY_IMAGES.map((img, i) => (
+              <Image
+                key={i}
+                source={img}
+                style={[styles.galleryThumb, { width: galleryThumbSize, height: galleryThumbSize }]}
+                contentFit="cover"
+                transition={300}
+              />
+            ))}
+          </View>
+        </View>
+
+        {/* ── Contact CTA ── */}
+        <View style={styles.section}>
+          <View style={styles.ctaCard}>
+            <LinearGradient
+              colors={[colors.primary.dark, "#2A1208"]}
+              style={StyleSheet.absoluteFillObject}
+            />
+            <Text style={styles.ctaTitle}>Come Visit Us</Text>
+            <Text style={styles.ctaAddress}>{CONTACT_INFO.ADDRESS.FULL}</Text>
+            <View style={styles.ctaActions}>
+              <TouchableOpacity
+                style={styles.ctaBtn}
+                onPress={() => Linking.openURL(EXTERNAL_URLS.GOOGLE_MAPS)}
+                activeOpacity={0.85}
+              >
+                <LinearGradient
+                  colors={[colors.secondary.main, colors.secondary.dark]}
+                  start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+                  style={styles.ctaBtnGradient}
+                >
+                  <Ionicons name="navigate" size={14} color="#1A0D0A" />
+                  <Text style={styles.ctaBtnText}>Get Directions</Text>
+                </LinearGradient>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.ctaBtnSecondary}
+                onPress={() => navigation.navigate("Contact")}
+                activeOpacity={0.85}
+              >
+                <Ionicons name="mail-outline" size={14} color={colors.secondary.main} />
+                <Text style={styles.ctaBtnSecondaryText}>Contact Us</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
       </ScrollView>
+
+      <SocialFAB />
     </View>
   );
 }
 
-/* ═══════════════════════════════════════════════════════ */
-/* STYLES                                                */
-/* ═══════════════════════════════════════════════════════ */
+// ─── Styles ───────────────────────────────────────────────────────────────────
+
 const styles = StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: colors.background.default,
   },
 
-  /* ──── Slideshow (AboutUs) ──── */
-  slideshowSection: {
-    paddingVertical: spacing["2xl"],
+  // ── Header
+  header: {
     paddingHorizontal: spacing.base,
-    backgroundColor: colors.background.default,
-    minHeight: 400,
+    paddingTop: spacing.base,
+    paddingBottom: spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border.light,
   },
-  slideshowContainer: {
-    alignItems: "center",
-    justifyContent: "center",
-    position: "relative",
-  },
-  slideImageWrapper: {
-    width: "100%",
-    maxWidth: 400,
-    paddingHorizontal: 20,
-    position: "relative",
-    marginBottom: spacing.lg,
-  },
-  slideImageBorder: {
-    borderRadius: 24,
-    padding: 3,
-    ...shadows.lg,
-  },
-  slideImageInner: {
-    borderRadius: 21,
-    overflow: "hidden",
-    backgroundColor: "#1a1a1a",
-  },
-  slideImage: {
-    width: "100%",
-    height: 260,
-  },
-  slideImageGlow: {
-    position: "absolute",
-    top: "10%",
-    left: "10%",
-    width: "80%",
-    height: "80%",
-    borderRadius: 24,
-    backgroundColor: "rgba(217, 167, 86, 0.08)",
-    zIndex: -1,
-  },
-  slideTextContent: {
-    width: "100%",
-    alignItems: "center",
-    paddingHorizontal: spacing.base,
-  },
-  slideTitle: {
+  headerTitle: {
     fontFamily: typography.fontFamily.heading,
-    fontSize: 36,
+    fontSize: typography.fontSize["3xl"],
     color: colors.text.primary,
-    letterSpacing: 1.2,
-    textTransform: "uppercase",
-    textAlign: "center",
-    marginBottom: spacing.md,
-    lineHeight: 40,
   },
-  slideSubtitle: {
-    fontFamily: typography.fontFamily.body,
-    fontSize: typography.fontSize.base,
-    color: "#4A2C17",
-    lineHeight: typography.fontSize.base * 1.7,
-    textAlign: "center",
-    maxWidth: 340,
-  },
-  slidePagination: {
-    position: "absolute",
-    right: 4,
-    top: "50%",
-    transform: [{ translateY: -40 }],
-    gap: 12,
-    alignItems: "center",
-  },
-  slideDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: "rgba(60, 31, 14, 0.3)",
-  },
-  slideDotActive: {
-    backgroundColor: colors.secondary.main,
+  headerSubtitle: {
+    fontFamily: typography.fontFamily.bodyMedium,
+    fontSize: typography.fontSize.sm,
+    color: colors.text.muted,
+    marginTop: 2,
   },
 
-  /* ──── Gallery Section ──── */
-  gallerySectionGradient: {
-    paddingTop: spacing["3xl"],
+  // ── Story Carousel
+  storyHero: {
+    width: "100%",
+    overflow: "hidden",
+    justifyContent: "flex-end",
+  },
+  storyContent: {
+    padding: spacing.xl,
     paddingBottom: spacing["2xl"],
   },
-  gallerySectionHeader: {
-    alignItems: "center",
-    paddingHorizontal: spacing.xl,
-    marginBottom: spacing["2xl"],
-  },
-  galleryHeaderLine: {
-    width: 100,
-    height: 3,
-    backgroundColor: "transparent",
-    borderRadius: 2,
-    marginBottom: spacing.lg,
-    position: "relative",
-    overflow: "visible",
-  },
-  galleryHeaderDotLeft: {
-    position: "absolute",
-    left: -6,
-    top: -4.5,
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: colors.secondary.main,
-  },
-  galleryHeaderDotRight: {
-    position: "absolute",
-    right: -6,
-    top: -4.5,
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: colors.secondary.main,
-  },
-  galleryOverline: {
-    color: colors.secondary.main,
-    fontSize: typography.fontSize.xs,
-    fontFamily: typography.fontFamily.bodySemibold,
-    letterSpacing: 4,
-    textTransform: "uppercase",
-    marginBottom: spacing.md,
-  },
-  gallerySectionTitle: {
+  storyTitle: {
     fontFamily: typography.fontFamily.heading,
-    fontSize: typography.fontSize["4xl"],
-    color: "#4A2C17",
-    letterSpacing: -0.5,
-    lineHeight: typography.fontSize["4xl"] * 1.1,
-    marginBottom: spacing.lg,
-    textAlign: "center",
+    fontSize: typography.fontSize["3xl"],
+    color: "#FFFDFB",
+    marginBottom: spacing.sm,
   },
-  gallerySectionDesc: {
+  storySubtitle: {
     fontFamily: typography.fontFamily.body,
     fontSize: typography.fontSize.base,
-    color: colors.text.secondary,
-    lineHeight: typography.fontSize.base * 1.85,
-    textAlign: "justify",
-    marginBottom: spacing.md,
-    paddingHorizontal: spacing.sm,
+    color: "rgba(255,253,251,0.8)",
+    lineHeight: 24,
   },
-  galleryHeaderDivider: {
-    width: 200,
-    height: 1,
-    backgroundColor: "rgba(217,167,86,0.4)",
-    marginTop: spacing.lg,
-  },
-
-  /* ──── Gallery Row ──── */
-  galleryRow: {
-    paddingHorizontal: spacing.lg,
-  },
-  galleryTitleCard: {
-    backgroundColor: "rgba(255,253,251,0.95)",
-    borderRadius: 20,
-    padding: spacing.xl,
-    borderWidth: 1,
-    borderColor: "rgba(217,167,86,0.25)",
-    marginBottom: spacing.lg,
-    position: "relative",
-    overflow: "hidden",
-    ...shadows.md,
-  },
-  galleryTitleGoldLine: {
+  storyDots: {
     position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    height: 3,
-    backgroundColor: colors.secondary.main,
-    opacity: 0.6,
-  },
-  galleryTitleDecor: {
-    position: "absolute",
-    top: -20,
-    right: -20,
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: "rgba(217,167,86,0.1)",
-  },
-  galleryTitleText: {
-    fontFamily: typography.fontFamily.heading,
-    fontSize: typography.fontSize["2xl"],
-    color: "#4A2C17",
-    letterSpacing: -0.3,
-    marginBottom: spacing.md,
-  },
-  galleryDescText: {
-    fontFamily: typography.fontFamily.body,
-    fontSize: typography.fontSize.base,
-    color: colors.text.secondary,
-    fontStyle: "italic",
-    lineHeight: typography.fontSize.base * 1.7,
-    opacity: 0.9,
-  },
-
-  /* Gallery image */
-  galleryImageContainer: {
-    width: "100%",
-    height: 300,
-    borderRadius: 20,
-    overflow: "hidden",
-    borderWidth: 2,
-    borderColor: "rgba(255,253,251,0.8)",
-    ...shadows.lg,
-    position: "relative",
-  },
-  galleryImageInner: {
-    width: "100%",
-    height: "100%",
-  },
-  galleryFullImage: {
-    width: "100%",
-    height: "100%",
-  },
-  galleryImageBottomGrad: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: "50%",
-  },
-  galleryImageTopGrad: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    height: "30%",
-  },
-  galleryCounterBadge: {
-    position: "absolute",
-    bottom: 16,
-    right: 16,
-    backgroundColor: "rgba(255,253,251,0.9)",
-    paddingHorizontal: spacing.md,
-    paddingVertical: 6,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "rgba(217,167,86,0.3)",
-    ...shadows.sm,
-  },
-  galleryCounterText: {
-    fontFamily: typography.fontFamily.bodyBold,
-    fontSize: 12,
-    color: "#4A2C17",
-  },
-
-  /* Gallery pagination */
-  galleryPagination: {
+    bottom: spacing.base,
+    right: spacing.xl,
     flexDirection: "row",
-    justifyContent: "center",
-    gap: 12,
-    paddingVertical: spacing.md,
-    marginTop: spacing.sm,
-    backgroundColor: "rgba(255,253,251,0.9)",
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: "rgba(217,167,86,0.2)",
-    marginHorizontal: spacing.xl,
-    ...shadows.sm,
+    gap: 6,
   },
-  progressDotOuter: {
-    width: 32,
-    height: 32,
-    alignItems: "center",
-    justifyContent: "center",
-    position: "relative",
-  },
-  progressDotRing: {
-    position: "absolute",
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    borderWidth: 1.5,
-    borderColor: "rgba(217,167,86,0.2)",
-  },
-  progressDotRingActive: {
-    position: "absolute",
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    borderWidth: 2,
-    borderColor: colors.secondary.main,
-  },
-  progressDotInner: {
+  dot: {
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: "rgba(217,167,86,0.5)",
+    backgroundColor: "rgba(255,253,251,0.4)",
   },
-  progressDotInnerActive: {
-    width: 9,
-    height: 9,
-    borderRadius: 4.5,
+  dotActive: {
+    width: 20,
     backgroundColor: colors.secondary.main,
   },
 
-  /* ──── Since 2014 ──── */
-  sinceSection: {
-    width: SCREEN_WIDTH,
+  // ── Facts Row
+  factsRow: {
+    flexDirection: "row",
+    paddingVertical: spacing.xl,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border.light,
+    backgroundColor: colors.background.paper,
   },
-  sinceGradient: {
-    paddingVertical: spacing["3xl"],
-    paddingHorizontal: spacing.xl,
+  factItem: {
+    flex: 1,
     alignItems: "center",
+    gap: 4,
   },
-  sinceOverline: {
-    fontFamily: typography.fontFamily.body,
-    fontSize: typography.fontSize.xs,
-    letterSpacing: 4,
-    color: colors.secondary.main,
-    textTransform: "uppercase",
-    opacity: 0.7,
+  factIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: borderRadius.md,
+    backgroundColor: "rgba(217,167,86,0.12)",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 4,
   },
-  sinceTitle: {
+  factValue: {
     fontFamily: typography.fontFamily.heading,
-    fontSize: typography.fontSize["4xl"],
-    color: colors.text.light,
-    marginTop: spacing.sm,
+    fontSize: typography.fontSize.xl,
+    color: colors.text.primary,
   },
-  sinceText: {
+  factLabel: {
+    fontFamily: typography.fontFamily.bodyMedium,
+    fontSize: typography.fontSize.xs,
+    color: colors.text.muted,
+    letterSpacing: 0.3,
+  },
+
+  // ── Sections
+  section: {
+    paddingHorizontal: spacing.base,
+    paddingTop: spacing["2xl"],
+    paddingBottom: spacing.base,
+  },
+  sectionHeaderRow: {
+    paddingHorizontal: spacing.base,
+    paddingTop: spacing["2xl"],
+    paddingBottom: spacing.base,
+  },
+  sectionOverline: {
+    fontFamily: typography.fontFamily.bodySemibold,
+    fontSize: typography.fontSize.xs,
+    color: colors.secondary.main,
+    letterSpacing: 1.5,
+    textTransform: "uppercase",
+    marginBottom: 4,
+  },
+  sectionTitle: {
+    fontFamily: typography.fontFamily.heading,
+    fontSize: typography.fontSize["2xl"],
+    color: colors.text.primary,
+    marginBottom: spacing.base,
+  },
+  body: {
     fontFamily: typography.fontFamily.body,
     fontSize: typography.fontSize.base,
-    color: colors.overlay.white80,
-    textAlign: "center",
-    lineHeight: typography.fontSize.base * 1.7,
-    marginBottom: spacing.xl,
-    maxWidth: SCREEN_WIDTH * 0.85,
+    color: colors.text.muted,
+    lineHeight: 25,
   },
-  sinceStats: {
+
+  // ── Gallery
+  gallerySection: {},
+  galleryGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.sm,
+    paddingHorizontal: spacing.base,
+  },
+  galleryThumb: {
+    borderRadius: borderRadius.md,
+    backgroundColor: colors.background.paper,
+  },
+
+  // ── CTA Card
+  ctaCard: {
+    borderRadius: borderRadius.xl,
+    overflow: "hidden",
+    padding: spacing.xl,
+    gap: spacing.sm,
+    ...shadows.lg,
+  },
+  ctaTitle: {
+    fontFamily: typography.fontFamily.heading,
+    fontSize: typography.fontSize["2xl"],
+    color: "#FFFDFB",
+  },
+  ctaAddress: {
+    fontFamily: typography.fontFamily.body,
+    fontSize: typography.fontSize.sm,
+    color: "rgba(255,253,251,0.6)",
+    lineHeight: 20,
+    marginBottom: spacing.sm,
+  },
+  ctaActions: {
+    gap: spacing.sm,
+  },
+  ctaBtn: {
+    borderRadius: borderRadius.full,
+    overflow: "hidden",
+    alignSelf: "flex-start",
+  },
+  ctaBtnGradient: {
     flexDirection: "row",
     alignItems: "center",
-    gap: spacing.lg,
+    gap: 6,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.md,
   },
-  sinceStat: {
+  ctaBtnText: {
+    fontFamily: typography.fontFamily.bodySemibold,
+    fontSize: typography.fontSize.sm,
+    color: "#1A0D0A",
+  },
+  ctaBtnSecondary: {
+    flexDirection: "row",
     alignItems: "center",
+    gap: 6,
+    paddingVertical: spacing.xs,
   },
-  sinceStatNumber: {
-    fontFamily: typography.fontFamily.heading,
-    fontSize: 48,
+  ctaBtnSecondaryText: {
+    fontFamily: typography.fontFamily.bodyMedium,
+    fontSize: typography.fontSize.sm,
     color: colors.secondary.main,
-    lineHeight: 52,
-  },
-  sinceStatLabel: {
-    fontFamily: typography.fontFamily.body,
-    fontSize: typography.fontSize.xs,
-    color: colors.overlay.white50,
-    letterSpacing: 1,
-    textTransform: "uppercase",
-    marginTop: 2,
-  },
-  sinceStatDivider: {
-    width: 1,
-    height: 36,
-    backgroundColor: colors.border.gold,
   },
 });

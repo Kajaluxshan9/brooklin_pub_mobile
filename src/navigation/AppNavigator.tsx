@@ -13,17 +13,17 @@ import MenuScreen from "../screens/MenuScreen";
 import EventsScreen from "../screens/EventsScreen";
 import ContactScreen from "../screens/ContactScreen";
 import SpecialScreen from "../screens/SpecialScreen";
+import OfflineBanner from "../components/common/OfflineBanner";
 
 import { colors, typography, spacing } from "../config/theme";
 
 // ─── Type definitions ────────────────────────────────────────────────────────
 export type RootTabParamList = {
   HomeTab: undefined;
-  AboutTab: undefined;
-  EventsTab: undefined;
   MenuTab: undefined;
+  EventsTab: undefined;
   SpecialTab: undefined;
-  ContactTab: undefined;
+  InfoTab: undefined;
 };
 
 export type HomeStackParamList = {
@@ -36,9 +36,15 @@ export type MenuStackParamList = {
   Special: { type?: "daily" | "other" };
 };
 
+export type InfoStackParamList = {
+  About: undefined;
+  Contact: undefined;
+};
+
 // ─── Stack Navigators ────────────────────────────────────────────────────────
 const HomeStack = createNativeStackNavigator<HomeStackParamList>();
 const MenuStack = createNativeStackNavigator<MenuStackParamList>();
+const InfoStack = createNativeStackNavigator<InfoStackParamList>();
 const Tab = createBottomTabNavigator<RootTabParamList>();
 
 const HomeStackNavigator = () => (
@@ -65,6 +71,18 @@ const MenuStackNavigator = () => (
   </MenuStack.Navigator>
 );
 
+const InfoStackNavigator = () => (
+  <InfoStack.Navigator
+    screenOptions={{
+      headerShown: false,
+      contentStyle: { backgroundColor: colors.background.default },
+    }}
+  >
+    <InfoStack.Screen name="About" component={AboutScreen} />
+    <InfoStack.Screen name="Contact" component={ContactScreen} />
+  </InfoStack.Navigator>
+);
+
 // ─── Tab Icon Map ────────────────────────────────────────────────────────────
 const TAB_ICONS: Record<
   keyof RootTabParamList,
@@ -74,14 +92,10 @@ const TAB_ICONS: Record<
   }
 > = {
   HomeTab: { focused: "home", outline: "home-outline" },
-  AboutTab: {
-    focused: "information-circle",
-    outline: "information-circle-outline",
-  },
-  EventsTab: { focused: "calendar", outline: "calendar-outline" },
   MenuTab: { focused: "restaurant", outline: "restaurant-outline" },
+  EventsTab: { focused: "calendar", outline: "calendar-outline" },
   SpecialTab: { focused: "flame", outline: "flame-outline" },
-  ContactTab: { focused: "mail", outline: "mail-outline" },
+  InfoTab: { focused: "information-circle", outline: "information-circle-outline" },
 };
 
 // ─── Tab Bar Icon with Active Indicator ──────────────────────────────────────
@@ -98,28 +112,17 @@ const TabBarIcon = ({
   const iconName = focused ? icons.focused : icons.outline;
   return (
     <View style={styles.tabIconContainer}>
-      {focused && (
-        <LinearGradient
-          colors={["rgba(217,167,86,0.25)", "rgba(217,167,86,0.08)"]}
-          style={styles.tabActiveBackground}
-        />
-      )}
-      <Ionicons name={iconName} size={20} color={color} />
+      {focused && <View style={styles.tabActiveBackground} />}
+      <Ionicons name={iconName} size={22} color={color} />
     </View>
   );
 };
 
-// ─── Glass Tab Bar Background ────────────────────────────────────────────────
+// ─── Tab Bar Background ────────────────────────────────────────────────
 const GlassTabBarBackground = () => (
   <View style={styles.glassTabBarBg}>
-    <BlurView intensity={60} tint="light" style={StyleSheet.absoluteFill} />
-    {/* Gold accent line at top of tab bar */}
-    <LinearGradient
-      colors={["transparent", "rgba(217,167,86,0.4)", "transparent"]}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 1, y: 0 }}
-      style={styles.tabBarTopAccent}
-    />
+    <BlurView intensity={80} tint="light" style={StyleSheet.absoluteFill} />
+    <View style={styles.tabBarTopAccent} />
   </View>
 );
 
@@ -127,6 +130,9 @@ const GlassTabBarBackground = () => (
 const AppNavigator = () => {
   return (
     <NavigationContainer>
+      {/* Offline banner rendered at root so it overlays all screens */}
+      <OfflineBanner />
+
       <Tab.Navigator
         screenOptions={({ route }) => ({
           headerShown: false,
@@ -153,9 +159,9 @@ const AppNavigator = () => {
           options={{ tabBarLabel: "Home" }}
         />
         <Tab.Screen
-          name="AboutTab"
-          component={AboutScreen}
-          options={{ tabBarLabel: "About" }}
+          name="MenuTab"
+          component={MenuStackNavigator}
+          options={{ tabBarLabel: "Menu" }}
         />
         <Tab.Screen
           name="EventsTab"
@@ -163,19 +169,14 @@ const AppNavigator = () => {
           options={{ tabBarLabel: "Events" }}
         />
         <Tab.Screen
-          name="MenuTab"
-          component={MenuStackNavigator}
-          options={{ tabBarLabel: "Menu" }}
-        />
-        <Tab.Screen
           name="SpecialTab"
           component={SpecialScreen}
           options={{ tabBarLabel: "Specials" }}
         />
         <Tab.Screen
-          name="ContactTab"
-          component={ContactScreen}
-          options={{ tabBarLabel: "Contact" }}
+          name="InfoTab"
+          component={InfoStackNavigator}
+          options={{ tabBarLabel: "Info" }}
         />
       </Tab.Navigator>
     </NavigationContainer>
@@ -185,42 +186,43 @@ const AppNavigator = () => {
 const styles = StyleSheet.create({
   glassTabBarBg: {
     ...StyleSheet.absoluteFillObject,
-    borderRadius: 24,
+    borderRadius: 28,
     overflow: "hidden",
-    backgroundColor: "rgba(255, 253, 251, 0.96)",
+    backgroundColor: "rgba(255,253,251,0.95)",
   },
   tabBarTopAccent: {
     position: "absolute",
     top: 0,
-    left: 16,
-    right: 16,
-    height: 1.5,
+    left: 20,
+    right: 20,
+    height: 1,
+    backgroundColor: "rgba(217,167,86,0.5)",
     borderRadius: 1,
   },
   tabBar: {
     position: "absolute",
-    bottom: Platform.OS === "ios" ? 22 : 14,
-    left: 10,
-    right: 10,
-    height: 68,
-    borderRadius: 26,
+    bottom: Platform.OS === "ios" ? 24 : 16,
+    left: 12,
+    right: 12,
+    height: 64,
+    borderRadius: 28,
     borderTopWidth: 0,
     backgroundColor: "transparent",
     borderWidth: 1,
-    borderColor: "rgba(217,167,86,0.3)",
-    elevation: 28,
+    borderColor: "rgba(217,167,86,0.25)",
+    elevation: 8,
     shadowColor: "#1A0A02",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.26,
-    shadowRadius: 28,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
     paddingBottom: 0,
     paddingTop: 0,
-    paddingHorizontal: 2,
+    paddingHorizontal: 4,
   },
   tabBarItem: {
     flex: 1,
     paddingVertical: 0,
-    height: 68,
+    height: 64,
     justifyContent: "center",
     alignItems: "center",
   },
@@ -228,20 +230,21 @@ const styles = StyleSheet.create({
     fontFamily: typography.fontFamily.bodySemibold,
     fontSize: 11,
     letterSpacing: 0.1,
-    marginTop: -1,
-    marginBottom: 5,
+    marginTop: -2,
+    marginBottom: 4,
   },
   tabIconContainer: {
     alignItems: "center",
     justifyContent: "center",
-    width: 50,
-    height: 34,
-    borderRadius: 17,
+    width: 48,
+    height: 32,
+    borderRadius: 16,
     position: "relative",
   },
   tabActiveBackground: {
     ...StyleSheet.absoluteFillObject,
-    borderRadius: 17,
+    borderRadius: 16,
+    backgroundColor: "rgba(217,167,86,0.18)",
   },
 });
 

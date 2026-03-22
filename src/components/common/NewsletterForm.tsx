@@ -102,7 +102,7 @@ export default function NewsletterForm({ onSuccess, compact = false }: Newslette
   }
 
   return (
-    <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined}>
+    <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"}>
       <View style={[styles.container, compact && styles.containerCompact]}>
         {!compact && (
           <>

@@ -253,10 +253,9 @@ export function BottomSheet({
               },
               sheetStyle,
             ]}
-            accessibilityModal={true}
             accessibilityViewIsModal={true}
             accessible={true}
-            aria-modal="true"
+            aria-modal={true}
           >
             {/* Handle */}
             {showHandle && (

@@ -68,7 +68,7 @@ const getOpenClosedStatus = (hours: OpeningHours[]): boolean => {
     const todayHours = hours.find(
       (h) => h.dayOfWeek?.toLowerCase() === todayKey && h.isOpen && h.isActive,
     );
-    if (todayHours) {
+    if (todayHours && todayHours.openTime && todayHours.closeTime) {
       const [oh, om] = todayHours.openTime.split(":").map(Number);
       const [ch, cm] = todayHours.closeTime.split(":").map(Number);
       const open = oh * 60 + om;
@@ -89,10 +89,12 @@ const getOpenClosedStatus = (hours: OpeningHours[]): boolean => {
     );
     if (
       prevHours &&
+      prevHours.openTime &&
+      prevHours.closeTime &&
       (prevHours.isClosedNextDay ||
         (() => {
-          const [oh] = prevHours.openTime.split(":").map(Number);
-          const [ch] = prevHours.closeTime.split(":").map(Number);
+          const [oh] = prevHours.openTime!.split(":").map(Number);
+          const [ch] = prevHours.closeTime!.split(":").map(Number);
           return ch < oh;
         })())
     ) {
@@ -326,7 +328,7 @@ export default function Footer({ openStatus: externalStatus }: FooterProps) {
                       >
                         {isClosed
                           ? "Closed"
-                          : `${formatTime12(h.openTime)} - ${formatTime12(h.closeTime)}`}
+                          : `${formatTime12(h.openTime ?? "")} - ${formatTime12(h.closeTime ?? "")}`}
                       </Text>
                     </View>
                   );

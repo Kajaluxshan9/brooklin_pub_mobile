@@ -7,6 +7,7 @@ import {
   Animated,
   Linking,
   Platform,
+  useWindowDimensions,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
@@ -15,6 +16,10 @@ import * as Haptics from "expo-haptics";
 import { colors, typography, spacing, borderRadius, shadows } from "../../config/theme";
 import { CONTACT_INFO, EXTERNAL_URLS } from "../../config/constants";
 import { useShare } from "../../hooks/useShare";
+
+// Height of the floating tab bar (used to offset FAB above it)
+const TAB_BAR_HEIGHT = 68;
+const TAB_BAR_BOTTOM_OFFSET = Platform.OS === "ios" ? 22 : 14;
 
 interface SocialAction {
   icon: keyof typeof Ionicons.glyphMap;
@@ -30,8 +35,15 @@ interface SocialAction {
 export default function SocialFAB() {
   const [isOpen, setIsOpen] = useState(false);
   const insets = useSafeAreaInsets();
+  const { height: screenHeight } = useWindowDimensions();
   const animation = useRef(new Animated.Value(0)).current;
   const { shareRestaurant } = useShare();
+
+  // Available vertical space above FAB before hitting safe area top
+  const fabBottom = insets.bottom + TAB_BAR_HEIGHT + TAB_BAR_BOTTOM_OFFSET + spacing.sm;
+  const availableUpwardSpace = screenHeight - fabBottom - insets.top - 80;
+  // Cap item stride so actions never go behind status bar
+  const actionStride = Math.min(64, availableUpwardSpace / (5 + 0.5));
 
   const toggle = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -87,7 +99,6 @@ export default function SocialFAB() {
   ];
 
   const rotation = animation.interpolate({ inputRange: [0, 1], outputRange: ["0deg", "45deg"] });
-  const fabBottom = insets.bottom + (Platform.OS === "ios" ? 80 : 72);
 
   return (
     <View style={[styles.container, { bottom: fabBottom }]} pointerEvents="box-none">
@@ -95,7 +106,7 @@ export default function SocialFAB() {
       {ACTIONS.map((action, index) => {
         const itemTranslateY = animation.interpolate({
           inputRange: [0, 1],
-          outputRange: [0, -(64 * (index + 1))],
+          outputRange: [0, -(actionStride * (index + 1))],
         });
         const itemOpacity = animation.interpolate({
           inputRange: [0, 0.5, 1],

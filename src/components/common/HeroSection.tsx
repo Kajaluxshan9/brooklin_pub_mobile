@@ -3,16 +3,14 @@ import {
   View,
   Text,
   StyleSheet,
-  Dimensions,
   ImageBackground,
   ImageSourcePropType,
   Animated,
   Easing,
+  useWindowDimensions,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { colors, typography, spacing } from "../../config/theme";
-
-const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
 interface HeroSectionProps {
   title: string;
@@ -131,6 +129,7 @@ export default function HeroSection({
   height = 320,
   children,
 }: HeroSectionProps) {
+  const { width: screenWidth } = useWindowDimensions();
   const isDark = variant === "dark";
 
   // Fade-in animation
@@ -291,6 +290,7 @@ export default function HeroSection({
               styles.description,
               {
                 color: isDark ? colors.text.lightMuted : "#6A3A1E",
+                maxWidth: screenWidth * 0.85,
               },
             ]}
           >
@@ -362,7 +362,7 @@ export default function HeroSection({
 
 const styles = StyleSheet.create({
   container: {
-    width: SCREEN_WIDTH,
+    width: "100%",
     overflow: "hidden",
   },
   gradient: {
@@ -431,7 +431,6 @@ const styles = StyleSheet.create({
     fontSize: typography.fontSize.base,
     textAlign: "center",
     lineHeight: typography.fontSize.base * 1.6,
-    maxWidth: SCREEN_WIDTH * 0.85,
     marginTop: spacing.sm,
   },
   bottomDivider: {

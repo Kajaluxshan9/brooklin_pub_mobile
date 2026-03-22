@@ -149,7 +149,7 @@ const styles = StyleSheet.create({
   imageContainer: {
     width: "100%",
     overflow: "hidden",
-    backgroundColor: colors.primary.dark,
+    backgroundColor: "transparent",
     position: "relative",
   },
   image: {
@@ -161,7 +161,7 @@ const styles = StyleSheet.create({
     height: "100%",
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: colors.primary.dark,
+    backgroundColor: "transparent",
   },
   placeholderText: {
     fontFamily: typography.fontFamily.heading,

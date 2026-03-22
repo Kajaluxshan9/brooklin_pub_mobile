@@ -1,15 +1,17 @@
-import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import React, { useState, useMemo, useCallback, useRef } from "react";
+import ImageViewer from "../components/common/ImageViewer";
 import {
   View,
   Text,
   StyleSheet,
-  Dimensions,
+  ScrollView,
   TouchableOpacity,
+  RefreshControl,
+  useWindowDimensions,
   FlatList,
   Modal,
-  ScrollView,
-  Animated,
-  RefreshControl,
+  Pressable,
+  ImageBackground,
 } from "react-native";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
@@ -26,64 +28,191 @@ import { useApiWithCache } from "../hooks/useApi";
 import { specialsService } from "../services/specials.service";
 import { getImageUrl } from "../services/api";
 import type { Special } from "../types/api.types";
-import {
-  GoldDivider,
-  CornerAccents,
-  ErrorView,
-} from "../components/common";
-import PageHeader from "../components/common/PageHeader";
-import SocialFAB from "../components/common/SocialFAB";
+import { ErrorView } from "../components/common";
 import { SpecialCardSkeleton } from "../components/common/SkeletonLoader";
+import SocialFAB from "../components/common/SocialFAB";
 import { useShare } from "../hooks/useShare";
 
-const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
+// ─── Types / Config ───────────────────────────────────────────────────────────
 
-const CARD_WIDTH = SCREEN_WIDTH * 0.82;
-const CARD_HEIGHT = CARD_WIDTH * 1.28;
-const CARD_GAP = spacing.md;
+type TabId = "daily" | "seasonal" | "game_day" | "chef";
 
-// ─── Filter helpers ──────────────────────────────────────────────────────────
-const filterDailySpecials = (specials: Special[]) =>
-  specials.filter(
-    (s) =>
-      s.type === "daily" ||
-      s.type === "day_time" ||
-      s.specialCategory === "late_night",
+const TABS: { id: TabId; label: string; icon: keyof typeof Ionicons.glyphMap; types: string[] }[] = [
+  { id: "daily",    label: "Daily",    icon: "sunny-outline",  types: ["daily", "day_time"] },
+  { id: "seasonal", label: "Seasonal", icon: "leaf-outline",   types: ["seasonal"] },
+  { id: "game_day", label: "Game Day", icon: "football-outline", types: ["game_time"] },
+  { id: "chef",     label: "Chef's",   icon: "restaurant-outline", types: ["chef"] },
+];
+
+// ─── Special Detail Modal ────────────────────────────────────────────────────
+
+const SpecialDetailModal = ({
+  special,
+  visible,
+  onClose,
+  onShare,
+}: {
+  special: Special | null;
+  visible: boolean;
+  onClose: () => void;
+  onShare: (s: Special) => void;
+}) => {
+  if (!special) return null;
+  const imageUrl = special.imageUrls?.[0] ? getImageUrl(special.imageUrls[0]) : null;
+  const [viewerUri, setViewerUri] = useState<string | null>(null);
+
+  const typeLabel = () => {
+    if (special.type === "daily" || special.type === "day_time") return "Daily Special";
+    if (special.specialCategory === "late_night") return "Late Night";
+    if (special.type === "seasonal") return "Seasonal";
+    if (special.type === "game_time") return "Game Day";
+    if (special.type === "chef") return "Chef's Special";
+    return "Special";
+  };
+
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <Pressable style={styles.modalOverlay} onPress={onClose}>
+        <Pressable style={styles.modalSheet} onPress={() => {}}>
+          <View style={styles.modalHandle} />
+
+          <ScrollView showsVerticalScrollIndicator={false} bounces={false}>
+            {imageUrl ? (
+              <TouchableOpacity activeOpacity={0.9} onPress={() => setViewerUri(imageUrl)}>
+                <Image source={{ uri: imageUrl }} style={styles.modalImage} contentFit="contain" transition={300} />
+              </TouchableOpacity>
+            ) : (
+              <LinearGradient
+                colors={[colors.primary.dark, colors.primary.main]}
+                style={[styles.modalImage, { alignItems: "center", justifyContent: "center" }]}
+              >
+                <Ionicons name="restaurant" size={52} color={colors.secondary.main} />
+              </LinearGradient>
+            )}
+
+            <View style={styles.modalBody}>
+              <View style={styles.modalHeaderRow}>
+                <View style={styles.modalTypeBadge}>
+                  <Text style={styles.modalTypeBadgeText}>{typeLabel()}</Text>
+                </View>
+                <TouchableOpacity
+                  style={styles.shareBtn}
+                  onPress={() => onShare(special)}
+                  activeOpacity={0.75}
+                >
+                  <Ionicons name="share-outline" size={18} color={colors.text.muted} />
+                </TouchableOpacity>
+              </View>
+
+              <Text style={styles.modalTitle}>{special.title}</Text>
+
+              {special.description ? (
+                <Text style={styles.modalDesc}>{special.description}</Text>
+              ) : null}
+
+              {special.dayOfWeek && (
+                <View style={styles.modalMetaRow}>
+                  <Ionicons name="calendar-outline" size={15} color={colors.secondary.main} />
+                  <Text style={styles.modalMetaText}>
+                    Every {special.dayOfWeek.charAt(0).toUpperCase() + special.dayOfWeek.slice(1)}
+                  </Text>
+                </View>
+              )}
+            </View>
+          </ScrollView>
+
+          <TouchableOpacity style={styles.modalCloseBtn} onPress={onClose} activeOpacity={0.8}>
+            <Text style={styles.modalCloseBtnText}>Close</Text>
+          </TouchableOpacity>
+        </Pressable>
+      </Pressable>
+
+      <ImageViewer uri={viewerUri} visible={!!viewerUri} onClose={() => setViewerUri(null)} />
+    </Modal>
   );
+};
 
-const filterOtherSpecials = (specials: Special[]) =>
-  specials.filter(
-    (s) =>
-      s.type !== "daily" &&
-      s.type !== "day_time" &&
-      s.specialCategory !== "late_night",
+// ─── Special Card ─────────────────────────────────────────────────────────────
+
+const SpecialCard = React.memo(({
+  special,
+  onPress,
+}: {
+  special: Special;
+  onPress: () => void;
+}) => {
+  const imageUrl = special.imageUrls?.[0] ? getImageUrl(special.imageUrls[0]) : null;
+  const isLateNight = special.specialCategory === "late_night";
+
+  return (
+    <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.87}>
+      {/* Image / Gradient left block */}
+      <View style={styles.cardImageWrap}>
+        {imageUrl ? (
+          <Image source={{ uri: imageUrl }} style={styles.cardImage} contentFit="contain" transition={300} />
+        ) : (
+          <LinearGradient
+            colors={[colors.primary.dark, colors.primary.main]}
+            style={[styles.cardImage, { alignItems: "center", justifyContent: "center" }]}
+          >
+            <Ionicons name="restaurant-outline" size={28} color={colors.secondary.main} />
+          </LinearGradient>
+        )}
+        {isLateNight && (
+          <View style={styles.lateNightBadge}>
+            <Ionicons name="moon" size={10} color="#FFFDFB" />
+          </View>
+        )}
+      </View>
+
+      {/* Content */}
+      <View style={styles.cardContent}>
+        <Text style={styles.cardTitle} numberOfLines={2}>{special.title}</Text>
+
+        {special.dayOfWeek && (
+          <View style={styles.cardDayRow}>
+            <Ionicons name="repeat-outline" size={12} color={colors.secondary.main} />
+            <Text style={styles.cardDayText}>
+              Every {special.dayOfWeek.charAt(0).toUpperCase() + special.dayOfWeek.slice(1)}
+            </Text>
+          </View>
+        )}
+
+        {special.description ? (
+          <Text style={styles.cardDesc} numberOfLines={2}>{special.description}</Text>
+        ) : null}
+      </View>
+
+      <Ionicons name="chevron-forward" size={16} color={colors.text.muted} style={{ alignSelf: "center", marginRight: spacing.sm }} />
+    </TouchableOpacity>
   );
+});
 
-// ═══════════════════════════════════════════════════════════════════
-// MAIN SCREEN
-// ═══════════════════════════════════════════════════════════════════
+// ─── Main Screen ──────────────────────────────────────────────────────────────
+
 export default function SpecialScreen({ route, navigation }: any) {
   const insets = useSafeAreaInsets();
-  // localType allows toggling between daily/other from the Specials tab
-  const [localType, setLocalType] = useState<"daily" | "other">(
-    route?.params?.type ?? "daily",
-  );
-  const specialType = localType;
-  const [selectedSpecial, setSelectedSpecial] = useState<Special | null>(null);
-  const [activeIndex, setActiveIndex] = useState(0);
-  const [refreshing, setRefreshing] = useState(false);
+  const { width: screenWidth } = useWindowDimensions();
   const { shareSpecial } = useShare();
-  const flatListRef = useRef<FlatList>(null);
-  const scrollX = useRef(new Animated.Value(0)).current;
+
+  // Derive initial tab from route params
+  const getInitialTab = (): TabId => {
+    const p = route?.params?.type;
+    if (p === "other") return "seasonal";
+    return "daily";
+  };
+
+  const [activeTab, setActiveTab] = useState<TabId>(getInitialTab());
+  const [selectedSpecial, setSelectedSpecial] = useState<Special | null>(null);
+  const [showModal, setShowModal] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   const {
-    data: specialsData,
+    data: specials,
     loading,
     error,
     refetch,
-  } = useApiWithCache<Special[]>("active-specials", () =>
-    specialsService.getActiveSpecials(),
-  );
+  } = useApiWithCache<Special[]>("active-specials", () => specialsService.getActiveSpecials());
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -91,67 +220,72 @@ export default function SpecialScreen({ route, navigation }: any) {
     setRefreshing(false);
   }, [refetch]);
 
-  // Filter based on type
-  const specials = useMemo(() => {
-    if (!specialsData || specialsData.length === 0) return [];
-    const t = (specialType || "").toLowerCase();
-    if (t === "other") return filterOtherSpecials(specialsData);
-    return filterDailySpecials(specialsData);
-  }, [specialsData, specialType]);
+  const activeTabConfig = TABS.find((t) => t.id === activeTab)!;
 
-  // Reset carousel when type toggle changes
-  useEffect(() => {
-    setActiveIndex(0);
-    flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
-  }, [localType]);
+  const filteredSpecials = useMemo((): Special[] => {
+    if (!specials) return [];
+    return specials
+      .filter((s) => s.isActive && activeTabConfig.types.includes(s.type))
+      .sort((a, b) => a.sortOrder - b.sortOrder);
+  }, [specials, activeTab]);
 
-  // Auto-scroll carousel
-  useEffect(() => {
-    if (specials.length <= 1) return;
-    const interval = setInterval(() => {
-      setActiveIndex((prev) => {
-        const next = (prev + 1) % specials.length;
-        flatListRef.current?.scrollToIndex({
-          index: next,
-          animated: true,
-          viewPosition: 0.5,
-        });
-        return next;
-      });
-    }, 4000);
-    return () => clearInterval(interval);
-  }, [specials.length]);
-
-  // Title & subtitle based on type — matching frontend getTitle/getSubtitle
-  const getTitle = () => {
-    if (specialType === "daily") return "Daily Specials";
-    if (specialType === "other") return "Other Specials";
-    if (specialType === "chef") return "Chef's Specials";
-    if (specialType === "night") return "Night Specials";
-    return `${specialType.charAt(0).toUpperCase() + specialType.slice(1)} Specials`;
-  };
-  const getSubtitle = () => {
-    if (specialType === "daily")
-      return "Start your day right with our daily deals, late-night bites, and all-day favourites";
-    if (specialType === "other")
-      return "Seasonal flavours, game-day specials, and chef's exclusive creations you won't want to miss";
-    if (specialType === "chef")
-      return "Handcrafted dishes made with passion by our talented kitchen team";
-    if (specialType === "night")
-      return "Evening exclusives to cap off your night in style";
-    return "Discover our special offerings";
-  };
-  const title = getTitle();
-  const subtitle = getSubtitle();
+  // Tab counts
+  const tabCounts = useMemo(() => {
+    if (!specials) return {} as Record<TabId, number>;
+    return TABS.reduce((acc, tab) => {
+      acc[tab.id] = specials.filter((s) => s.isActive && tab.types.includes(s.type)).length;
+      return acc;
+    }, {} as Record<TabId, number>);
+  }, [specials]);
 
   if (error) return <ErrorView message={error} onRetry={refetch} />;
 
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
+      {/* ── Header ── */}
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>Specials</Text>
+        <Text style={styles.headerSubtitle}>Handcrafted deals crafted for you</Text>
+      </View>
 
+      {/* ── Category Tabs ── */}
+      <View style={styles.tabBar}>
+        {TABS.map((tab) => {
+          const active = tab.id === activeTab;
+          const count = tabCounts[tab.id] ?? 0;
+          if (count === 0 && !loading) return null;
+          return (
+            <TouchableOpacity
+              key={tab.id}
+              style={[styles.tab, active && styles.tabActive]}
+              onPress={() => setActiveTab(tab.id)}
+              activeOpacity={0.75}
+            >
+              <Ionicons
+                name={tab.icon}
+                size={15}
+                color={active ? colors.secondary.main : colors.text.muted}
+              />
+              <Text style={[styles.tabText, active && styles.tabTextActive]}>
+                {tab.label}
+              </Text>
+              {count > 0 && (
+                <View style={[styles.tabCount, active && styles.tabCountActive]}>
+                  <Text style={[styles.tabCountText, active && styles.tabCountTextActive]}>
+                    {count}
+                  </Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+
+      {/* ── Content ── */}
       <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 100 }]}
         showsVerticalScrollIndicator={false}
-        bounces={true}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -160,307 +294,65 @@ export default function SpecialScreen({ route, navigation }: any) {
             colors={[colors.secondary.main]}
           />
         }
-        contentContainerStyle={{ paddingBottom: insets.bottom + 88 }}
       >
-        {/* Page header */}
-        <PageHeader
-          title={title}
-          subtitle={subtitle}
-          icon="flame-outline"
-        />
-
-        {/* Daily / Other toggle */}
-        <View style={styles.typeToggleRow}>
-          {(["daily", "other"] as const).map((t) => {
-            const isActive = localType === t;
-            return (
-              <TouchableOpacity
-                key={t}
-                style={[styles.typeToggleBtn, isActive && styles.typeToggleBtnActive]}
-                onPress={() => setLocalType(t)}
-                activeOpacity={0.75}
-              >
-                <Text style={[styles.typeToggleText, isActive && styles.typeToggleTextActive]}>
-                  {t === "daily" ? "Daily Specials" : "Other Specials"}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
+        {/* Tab description header */}
+        <View style={styles.tabHeroRow}>
+          <View style={[styles.tabHeroIcon, { backgroundColor: "rgba(217,167,86,0.12)" }]}>
+            <Ionicons name={activeTabConfig.icon} size={24} color={colors.secondary.main} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.tabHeroTitle}>{activeTabConfig.label} Specials</Text>
+            {filteredSpecials.length > 0 && (
+              <Text style={styles.tabHeroCount}>{filteredSpecials.length} available</Text>
+            )}
+          </View>
         </View>
 
         {loading ? (
-          <View style={{ paddingHorizontal: spacing.base, paddingTop: spacing.xl }}>
-            {[1, 2, 3].map((i) => (
-              <SpecialCardSkeleton key={i} />
-            ))}
+          <View style={styles.skeletonWrap}>
+            {[1, 2, 3].map((i) => <SpecialCardSkeleton key={i} />)}
           </View>
-        ) : specials.length === 0 ? (
+        ) : filteredSpecials.length === 0 ? (
           <View style={styles.emptyState}>
-            <Ionicons
-              name="sparkles-outline"
-              size={40}
-              color={colors.secondary.main}
-            />
-            <Text style={styles.emptyTitle}>No Specials Right Now</Text>
-            <Text style={styles.emptyText}>
-              Check back soon for new specials!
+            <Ionicons name={activeTabConfig.icon} size={48} color={colors.border.gold} />
+            <Text style={styles.emptyTitle}>No {activeTabConfig.label} Specials</Text>
+            <Text style={styles.emptyDesc}>
+              Check back soon — we update our specials regularly.
             </Text>
           </View>
         ) : (
-          <View style={styles.carouselSection}>
-            <Animated.FlatList
-              ref={flatListRef}
-              horizontal
-              data={specials}
-              keyExtractor={(item) => item.id}
-              showsHorizontalScrollIndicator={false}
-              snapToInterval={CARD_WIDTH + CARD_GAP}
-              decelerationRate="fast"
-              contentContainerStyle={{
-                paddingHorizontal: (SCREEN_WIDTH - CARD_WIDTH) / 2,
-              }}
-              ItemSeparatorComponent={() => (
-                <View style={{ width: CARD_GAP }} />
-              )}
-              onScroll={Animated.event(
-                [{ nativeEvent: { contentOffset: { x: scrollX } } }],
-                { useNativeDriver: true },
-              )}
-              onMomentumScrollEnd={(e: any) => {
-                const idx = Math.round(
-                  e.nativeEvent.contentOffset.x / (CARD_WIDTH + CARD_GAP),
-                );
-                setActiveIndex(Math.max(0, Math.min(idx, specials.length - 1)));
-              }}
-              getItemLayout={(_: any, index: number) => ({
-                length: CARD_WIDTH + CARD_GAP,
-                offset: (CARD_WIDTH + CARD_GAP) * index,
-                index,
-              })}
-              renderItem={({
-                item,
-                index,
-              }: {
-                item: Special;
-                index: number;
-              }) => {
-                const inputRange = [
-                  (index - 1) * (CARD_WIDTH + CARD_GAP),
-                  index * (CARD_WIDTH + CARD_GAP),
-                  (index + 1) * (CARD_WIDTH + CARD_GAP),
-                ];
-                const scale = scrollX.interpolate({
-                  inputRange,
-                  outputRange: [0.9, 1, 0.9],
-                  extrapolate: "clamp",
-                });
-                const opacity = scrollX.interpolate({
-                  inputRange,
-                  outputRange: [0.6, 1, 0.6],
-                  extrapolate: "clamp",
-                });
-
-                return (
-                  <Animated.View style={{ transform: [{ scale }], opacity }}>
-                    <TouchableOpacity
-                      activeOpacity={0.9}
-                      onPress={() => setSelectedSpecial(item)}
-                      style={styles.specialCard}
-                    >
-                      <Image
-                        source={{
-                          uri:
-                            getImageUrl(item.imageUrls?.[0]) ||
-                            "https://i.pinimg.com/736x/42/2c/2e/422c2e649799697f1d1355ba8f308edd.jpg",
-                        }}
-                        style={styles.specialCardImage}
-                        contentFit="cover"
-                        transition={300}
-                      />
-                      <LinearGradient
-                        colors={["transparent", colors.overlay.warmDark]}
-                        style={styles.specialCardOverlay}
-                      />
-                      {/* Title overlay */}
-                      <View style={styles.specialCardContent}>
-                        <Text style={styles.specialCardTitle} numberOfLines={2}>
-                          {item.title}
-                        </Text>
-                        {item.description && (
-                          <Text
-                            style={styles.specialCardDesc}
-                            numberOfLines={2}
-                          >
-                            {item.description}
-                          </Text>
-                        )}
-                      </View>
-                      <CornerAccents size={10} color={colors.secondary.main} />
-                      {/* Type badge */}
-                      <View style={styles.specialBadge}>
-                        <Text style={styles.specialBadgeText}>
-                          {item.type === "daily"
-                            ? "Daily"
-                            : item.type === "seasonal"
-                              ? "Seasonal"
-                              : item.type === "chef"
-                                ? "Chef's"
-                                : item.type === "game_time"
-                                  ? "Game Day"
-                                  : item.type === "day_time"
-                                    ? "Day Time"
-                                    : "Special"}
-                        </Text>
-                      </View>
-                      {/* Day-of-week badge for daily specials */}
-                      {item.type === "daily" && item.dayOfWeek && (
-                        <View style={styles.specialDayBadge}>
-                          <Text style={styles.specialDayBadgeText}>
-                            {item.dayOfWeek}
-                          </Text>
-                        </View>
-                      )}
-                    </TouchableOpacity>
-                  </Animated.View>
-                );
-              }}
-            />
-
-            {/* Pagination dots */}
-            {specials.length > 1 && (
-              <View style={styles.dotsRow}>
-                {specials.map((_, i) => {
-                  const isActive = i === activeIndex;
-                  return (
-                    <View
-                      key={i}
-                      style={[
-                        styles.dot,
-                        {
-                          width: isActive ? 24 : 8,
-                          opacity: isActive ? 1 : 0.4,
-                          backgroundColor: colors.secondary.main,
-                        },
-                      ]}
-                    />
-                  );
-                })}
-              </View>
-            )}
-
-            {/* Swipe hint */}
-            <Text style={styles.swipeHint}>
-              Swipe to explore • Tap to view details
-            </Text>
+          <View style={styles.cardList}>
+            {filteredSpecials.map((special) => (
+              <SpecialCard
+                key={special.id}
+                special={special}
+                onPress={() => {
+                  setSelectedSpecial(special);
+                  setShowModal(true);
+                }}
+              />
+            ))}
           </View>
         )}
-
       </ScrollView>
 
-      {/* Floating call FAB */}
+      {/* ── Detail Modal ── */}
+      <SpecialDetailModal
+        special={selectedSpecial}
+        visible={showModal}
+        onClose={() => setShowModal(false)}
+        onShare={(s) => {
+          setShowModal(false);
+          shareSpecial(s.title, s.description);
+        }}
+      />
+
       <SocialFAB />
-
-      {/* ════ Detail Popup ════ */}
-      <Modal
-        visible={!!selectedSpecial}
-        transparent
-        animationType="fade"
-        statusBarTranslucent
-        onRequestClose={() => setSelectedSpecial(null)}
-      >
-        <View style={styles.popupOverlay}>
-          {/* Top action bar: Close + Share */}
-          <View style={[styles.popupTopBar, { top: insets.top + spacing.md }]}>
-            <TouchableOpacity
-              style={styles.popupClose}
-              onPress={() => setSelectedSpecial(null)}
-              activeOpacity={0.7}
-            >
-              <View style={styles.popupCloseInner}>
-                <Ionicons name="close" size={24} color={colors.background.paper} />
-              </View>
-            </TouchableOpacity>
-            {selectedSpecial && (
-              <TouchableOpacity
-                style={styles.popupShareBtn}
-                onPress={() => shareSpecial(selectedSpecial.title, selectedSpecial.description)}
-                activeOpacity={0.7}
-              >
-                <View style={styles.popupCloseInner}>
-                  <Ionicons name="share-social-outline" size={22} color={colors.background.paper} />
-                </View>
-              </TouchableOpacity>
-            )}
-          </View>
-
-          {/* Full-screen image */}
-          {selectedSpecial && (
-            <>
-              <Image
-                source={{
-                  uri:
-                    getImageUrl(selectedSpecial.imageUrls?.[1]) ||
-                    getImageUrl(selectedSpecial.imageUrls?.[0]) ||
-                    "https://images.template.net/278326/Restaurant-Menu-Template-edit-online.png",
-                }}
-                style={styles.popupImage}
-                contentFit="contain"
-                transition={300}
-              />
-              {/* Info bar */}
-              <View style={styles.popupInfoBar}>
-                <LinearGradient
-                  colors={["rgba(60,31,14,0.95)", "rgba(26,13,10,0.98)"]}
-                  style={styles.popupInfoGradient}
-                >
-                  <Text style={styles.popupInfoTitle} numberOfLines={1}>
-                    {selectedSpecial.title}
-                  </Text>
-                  {selectedSpecial.description && (
-                    <Text style={styles.popupInfoDesc} numberOfLines={2}>
-                      {selectedSpecial.description}
-                    </Text>
-                  )}
-                  <GoldDivider width="40%" marginVertical={spacing.sm} />
-                  <View style={styles.popupInfoBadgeRow}>
-                    <View style={styles.popupInfoBadge}>
-                      <Ionicons
-                        name="sparkles"
-                        size={12}
-                        color={colors.secondary.main}
-                      />
-                      <Text style={styles.popupInfoBadgeText}>
-                        {selectedSpecial.type === "daily"
-                          ? "Daily Special"
-                          : selectedSpecial.type === "seasonal"
-                            ? "Seasonal"
-                            : selectedSpecial.type === "chef"
-                              ? "Chef's Special"
-                              : "Limited Time"}
-                      </Text>
-                    </View>
-                    {selectedSpecial.dayOfWeek && (
-                      <View style={styles.popupInfoBadge}>
-                        <Ionicons
-                          name="calendar-outline"
-                          size={12}
-                          color={colors.secondary.main}
-                        />
-                        <Text style={styles.popupInfoBadgeText}>
-                          {selectedSpecial.dayOfWeek}
-                        </Text>
-                      </View>
-                    )}
-                  </View>
-                </LinearGradient>
-              </View>
-            </>
-          )}
-        </View>
-      </Modal>
     </View>
   );
 }
+
+// ─── Styles ───────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
   root: {
@@ -468,292 +360,288 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background.default,
   },
 
-  /* Type toggle */
-  typeToggleRow: {
-    flexDirection: "row",
-    marginHorizontal: spacing.base,
-    marginTop: spacing.lg,
-    marginBottom: spacing.sm,
-    backgroundColor: "rgba(74,44,23,0.08)",
-    borderRadius: borderRadius.lg,
-    padding: 3,
+  // ── Header
+  header: {
+    paddingHorizontal: spacing.base,
+    paddingTop: spacing.base,
+    paddingBottom: spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border.light,
   },
-  typeToggleBtn: {
-    flex: 1,
-    paddingVertical: spacing.sm,
-    alignItems: "center",
-    borderRadius: borderRadius.md,
+  headerTitle: {
+    fontFamily: typography.fontFamily.heading,
+    fontSize: typography.fontSize["3xl"],
+    color: colors.text.primary,
   },
-  typeToggleBtnActive: {
-    backgroundColor: colors.secondary.main,
-  },
-  typeToggleText: {
-    fontFamily: typography.fontFamily.bodySemibold,
+  headerSubtitle: {
+    fontFamily: typography.fontFamily.bodyMedium,
     fontSize: typography.fontSize.sm,
     color: colors.text.muted,
-    letterSpacing: 0.3,
-  },
-  typeToggleTextActive: {
-    color: "#fff",
+    marginTop: 2,
   },
 
-  /* Empty state */
+  // ── Tabs
+  tabBar: {
+    flexDirection: "row",
+    backgroundColor: colors.background.default,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border.light,
+    paddingHorizontal: spacing.sm,
+  },
+  tab: {
+    flex: 1,
+    flexDirection: "column",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: spacing.md,
+    gap: 3,
+    borderBottomWidth: 2,
+    borderBottomColor: "transparent",
+  },
+  tabActive: {
+    borderBottomColor: colors.secondary.main,
+  },
+  tabText: {
+    fontFamily: typography.fontFamily.bodyMedium,
+    fontSize: typography.fontSize.xs,
+    color: colors.text.muted,
+    letterSpacing: 0.2,
+  },
+  tabTextActive: {
+    color: colors.secondary.main,
+    fontFamily: typography.fontFamily.bodySemibold,
+  },
+  tabCount: {
+    backgroundColor: colors.border.light,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: borderRadius.full,
+    minWidth: 18,
+    alignItems: "center",
+  },
+  tabCountActive: {
+    backgroundColor: "rgba(217,167,86,0.2)",
+  },
+  tabCountText: {
+    fontFamily: typography.fontFamily.bodySemibold,
+    fontSize: 9,
+    color: colors.text.muted,
+  },
+  tabCountTextActive: {
+    color: colors.secondary.dark,
+  },
+
+  // ── Scroll
+  scroll: { flex: 1 },
+  scrollContent: { paddingTop: spacing.base },
+  skeletonWrap: { paddingHorizontal: spacing.base },
+
+  // ── Tab Hero Row
+  tabHeroRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+    paddingHorizontal: spacing.base,
+    paddingBottom: spacing.base,
+  },
+  tabHeroIcon: {
+    width: 52,
+    height: 52,
+    borderRadius: borderRadius.md,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  tabHeroTitle: {
+    fontFamily: typography.fontFamily.headingSemibold,
+    fontSize: typography.fontSize.xl,
+    color: colors.text.primary,
+  },
+  tabHeroCount: {
+    fontFamily: typography.fontFamily.bodyMedium,
+    fontSize: typography.fontSize.sm,
+    color: colors.text.muted,
+    marginTop: 2,
+  },
+
+  // ── Card List
+  cardList: {
+    paddingHorizontal: spacing.base,
+    gap: spacing.sm,
+  },
+
+  // ── Special Card
+  card: {
+    flexDirection: "row",
+    backgroundColor: colors.background.paper,
+    borderRadius: borderRadius.lg,
+    borderWidth: 1,
+    borderColor: colors.border.light,
+    overflow: "hidden",
+    alignItems: "stretch",
+    ...shadows.sm,
+  },
+  cardImageWrap: {
+    position: "relative",
+  },
+  cardImage: {
+    width: 100,
+    aspectRatio: 3 / 4,
+  },
+  lateNightBadge: {
+    position: "absolute",
+    top: spacing.sm,
+    left: spacing.sm,
+    backgroundColor: "rgba(0,0,0,0.7)",
+    borderRadius: borderRadius.full,
+    padding: 4,
+  },
+  cardContent: {
+    flex: 1,
+    padding: spacing.md,
+    justifyContent: "center",
+    gap: 4,
+  },
+  cardTitle: {
+    fontFamily: typography.fontFamily.headingMedium,
+    fontSize: typography.fontSize.base,
+    color: colors.text.primary,
+    lineHeight: 21,
+  },
+  cardDayRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  cardDayText: {
+    fontFamily: typography.fontFamily.bodyMedium,
+    fontSize: typography.fontSize.xs,
+    color: colors.secondary.main,
+  },
+  cardDesc: {
+    fontFamily: typography.fontFamily.body,
+    fontSize: typography.fontSize.xs,
+    color: colors.text.muted,
+    lineHeight: 17,
+  },
+
+  // ── Empty State
   emptyState: {
     alignItems: "center",
-    paddingVertical: spacing["2xl"] * 2,
-    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing["3xl"],
+    paddingHorizontal: spacing["2xl"],
+    gap: spacing.sm,
   },
   emptyTitle: {
-    fontFamily: typography.fontFamily.heading,
+    fontFamily: typography.fontFamily.headingMedium,
     fontSize: typography.fontSize.xl,
-    color: colors.primary.main,
-    marginTop: spacing.lg,
-    marginBottom: spacing.sm,
+    color: colors.text.primary,
+    marginTop: spacing.sm,
   },
-  emptyText: {
+  emptyDesc: {
     fontFamily: typography.fontFamily.body,
     fontSize: typography.fontSize.base,
     color: colors.text.muted,
     textAlign: "center",
+    lineHeight: 22,
   },
 
-  /* Carousel */
-  carouselSection: {
-    paddingVertical: spacing.xl,
-  },
-  specialCard: {
-    width: CARD_WIDTH,
-    height: CARD_HEIGHT,
-    borderRadius: borderRadius.xl,
-    overflow: "hidden",
-    position: "relative",
-    ...shadows.gold,
-  },
-  specialCardImage: {
-    width: "100%",
-    height: "100%",
-  },
-  specialCardOverlay: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: "50%",
-  },
-  specialCardContent: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    padding: spacing.lg,
-  },
-  specialCardTitle: {
-    fontFamily: typography.fontFamily.heading,
-    fontSize: 24,
-    color: colors.background.paper,
-    textShadowColor: colors.overlay.medium,
-    textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 6,
-    marginBottom: spacing.xs,
-    lineHeight: 28,
-  },
-  specialCardDesc: {
-    fontFamily: typography.fontFamily.body,
-    fontSize: typography.fontSize.sm,
-    color: "rgba(255,253,251,0.85)",
-    lineHeight: typography.fontSize.sm * 1.5,
-  },
-  specialBadge: {
-    position: "absolute",
-    top: spacing.md,
-    left: spacing.md,
-    backgroundColor: colors.secondary.main,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
-    borderRadius: borderRadius.sm,
-  },
-  specialBadgeText: {
-    fontFamily: typography.fontFamily.bodyBold,
-    fontSize: 10,
-    color: colors.background.paper,
-    textTransform: "uppercase",
-    letterSpacing: 1,
-  },
-  specialDayBadge: {
-    position: "absolute",
-    top: spacing.md,
-    right: spacing.md,
-    backgroundColor: "rgba(40,20,8,0.65)",
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
-    borderRadius: borderRadius.sm,
-    borderWidth: 1,
-    borderColor: "rgba(217,167,86,0.5)",
-  },
-  specialDayBadgeText: {
-    fontFamily: typography.fontFamily.bodySemibold,
-    fontSize: 10,
-    color: colors.secondary.main,
-    textTransform: "uppercase",
-    letterSpacing: 0.8,
-  },
-
-  /* Dots */
-  dotsRow: {
-    flexDirection: "row",
-    justifyContent: "center",
-    gap: spacing.sm,
-    marginTop: spacing.lg,
-  },
-  dot: {
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: colors.secondary.main,
-  },
-
-  /* Swipe hint */
-  swipeHint: {
-    textAlign: "center",
-    marginTop: spacing.md,
-    fontFamily: typography.fontFamily.body,
-    fontSize: typography.fontSize.xs,
-    color: colors.text.muted,
-    letterSpacing: 0.5,
-  },
-
-  /* Popup */
-  popupOverlay: {
+  // ── Modal
+  modalOverlay: {
     flex: 1,
+    backgroundColor: "rgba(0,0,0,0.55)",
+    justifyContent: "flex-end",
+  },
+  modalSheet: {
+    backgroundColor: colors.background.paper,
+    borderTopLeftRadius: borderRadius["2xl"],
+    borderTopRightRadius: borderRadius["2xl"],
+    maxHeight: "85%",
+    ...shadows.lg,
+  },
+  modalHandle: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: colors.border.gold,
+    alignSelf: "center",
+    marginTop: spacing.md,
+    marginBottom: spacing.sm,
+  },
+  modalImage: {
+    width: "100%",
+    aspectRatio: 4 / 3,
+  },
+  modalBody: {
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.base,
+    paddingBottom: spacing.sm,
+  },
+  modalHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: spacing.sm,
+  },
+  modalTypeBadge: {
+    backgroundColor: "rgba(217,167,86,0.15)",
+    borderWidth: 1,
+    borderColor: colors.border.gold,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 4,
+    borderRadius: borderRadius.full,
+  },
+  modalTypeBadgeText: {
+    fontFamily: typography.fontFamily.bodySemibold,
+    fontSize: typography.fontSize.xs,
+    color: colors.secondary.dark,
+    letterSpacing: 0.5,
+    textTransform: "uppercase",
+  },
+  shareBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: borderRadius.md,
     backgroundColor: colors.background.default,
     alignItems: "center",
     justifyContent: "center",
-  },
-  popupTopBar: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    paddingHorizontal: spacing.base,
-    zIndex: 20,
-  },
-  popupClose: {
-    zIndex: 20,
-  },
-  popupShareBtn: {
-    zIndex: 20,
-  },
-  popupCloseInner: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: colors.overlay.medium,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  popupImage: {
-    width: SCREEN_WIDTH,
-    height: SCREEN_HEIGHT * 0.65,
-  },
-  popupInfoBar: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-  },
-  popupInfoGradient: {
-    paddingHorizontal: spacing.xl,
-    paddingTop: spacing.lg,
-    paddingBottom: spacing["2xl"],
-    alignItems: "center",
-  },
-  popupInfoTitle: {
-    fontFamily: typography.fontFamily.heading,
-    fontSize: typography.fontSize.xl,
-    color: colors.text.light,
-    marginBottom: spacing.xs,
-  },
-  popupInfoDesc: {
-    fontFamily: typography.fontFamily.body,
-    fontSize: typography.fontSize.sm,
-    color: "rgba(243,227,204,0.8)",
-    textAlign: "center",
-    lineHeight: typography.fontSize.sm * 1.5,
-  },
-  popupInfoBadgeRow: {
-    flexDirection: "row",
-    gap: spacing.md,
-  },
-  popupInfoBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    backgroundColor: colors.glass.gold,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
-    borderRadius: borderRadius.full,
-  },
-  popupInfoBadgeText: {
-    fontFamily: typography.fontFamily.bodyMedium,
-    fontSize: typography.fontSize.xs,
-    color: colors.secondary.main,
-    textTransform: "capitalize",
-  },
-
-  /* Specials List */
-  listSection: {
-    paddingVertical: spacing.xl,
-    paddingHorizontal: spacing.base,
-  },
-  listCard: {
-    flexDirection: "row",
-    backgroundColor: "rgba(255,255,255,0.95)",
-    borderRadius: borderRadius.lg,
-    overflow: "hidden",
-    marginBottom: spacing.md,
     borderWidth: 1,
-    borderColor: colors.border.gold,
-    ...shadows.card,
-    position: "relative",
+    borderColor: colors.border.light,
   },
-  listCardImage: {
-    width: 100,
-    height: 100,
-  },
-  listCardContent: {
-    flex: 1,
-    padding: spacing.md,
-    justifyContent: "center",
-  },
-  listCardTitle: {
+  modalTitle: {
     fontFamily: typography.fontFamily.heading,
-    fontSize: typography.fontSize.lg,
+    fontSize: typography.fontSize["3xl"],
     color: colors.text.primary,
-    marginBottom: 2,
+    lineHeight: 38,
+    marginBottom: spacing.sm,
   },
-  listCardDesc: {
+  modalDesc: {
     fontFamily: typography.fontFamily.body,
-    fontSize: typography.fontSize.sm,
+    fontSize: typography.fontSize.base,
     color: colors.text.muted,
-    lineHeight: typography.fontSize.sm * 1.4,
-    marginBottom: spacing.xs,
+    lineHeight: 24,
+    marginBottom: spacing.base,
   },
-  listCardMeta: {
+  modalMetaRow: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
+    gap: spacing.sm,
+    marginBottom: spacing.sm,
   },
-  listCardTypeBadge: {
-    backgroundColor: colors.glass.gold,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 2,
-    borderRadius: borderRadius.sm,
+  modalMetaText: {
+    fontFamily: typography.fontFamily.bodyMedium,
+    fontSize: typography.fontSize.base,
+    color: colors.text.secondary,
   },
-  listCardTypeText: {
+  modalCloseBtn: {
+    margin: spacing.base,
+    paddingVertical: spacing.md,
+    borderRadius: borderRadius.full,
+    backgroundColor: colors.primary.main,
+    alignItems: "center",
+  },
+  modalCloseBtnText: {
     fontFamily: typography.fontFamily.bodySemibold,
-    fontSize: 10,
-    color: colors.secondary.main,
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
+    fontSize: typography.fontSize.base,
+    color: "#FFFDFB",
   },
 });

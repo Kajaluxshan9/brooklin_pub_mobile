@@ -74,11 +74,9 @@ export function GoldDivider({
             width: isHorizontal ? (width as any) : (height as any),
             height: isHorizontal ? (height as any) : (width as any),
             opacity,
-            transform: [
-              {
-                [isHorizontal ? "scaleX" : "scaleY"]: scaleAnim,
-              },
-            ],
+            transform: isHorizontal
+              ? [{ scaleX: scaleAnim }]
+              : [{ scaleY: scaleAnim }],
           },
         ]}
       />

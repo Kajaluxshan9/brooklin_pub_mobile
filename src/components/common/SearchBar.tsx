@@ -77,7 +77,7 @@ export function SearchBar({
   const [filteredSuggestions, setFilteredSuggestions] = useState<string[]>([]);
   const [showDropdown, setShowDropdown] = useState(false);
 
-  const debounceTimeout = useRef<NodeJS.Timeout>();
+  const debounceTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const focusAnim = useRef(new Animated.Value(0)).current;
   const clearButtonScale = useRef(new Animated.Value(0)).current;
 
@@ -192,7 +192,7 @@ export function SearchBar({
   };
 
   // Show history or suggestions
-  const dropdownData =
+  const dropdownData: Array<{ type: "suggestion" | "history"; text: string }> =
     value.length >= 2 && filteredSuggestions.length > 0
       ? filteredSuggestions.map((s) => ({
           type: "suggestion" as const,

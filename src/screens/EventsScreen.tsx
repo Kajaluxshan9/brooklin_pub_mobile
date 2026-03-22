@@ -1,20 +1,17 @@
-import React, {
-  useMemo,
-  useState,
-  useCallback,
-  useEffect,
-  useRef,
-} from "react";
+import React, { useMemo, useState, useCallback, useRef } from "react";
+import ImageViewer from "../components/common/ImageViewer";
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
-  Dimensions,
   TouchableOpacity,
   Linking,
-  Animated,
   RefreshControl,
+  useWindowDimensions,
+  FlatList,
+  Modal,
+  Pressable,
 } from "react-native";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
@@ -29,481 +26,248 @@ import {
 } from "../config/theme";
 import { useApiWithCache } from "../hooks/useApi";
 import { eventsService } from "../services/events.service";
+import { CONTACT_INFO } from "../config/constants";
 import { getImageUrl } from "../services/api";
-import type { Event } from "../types/api.types";
-import {
-  SectionHeader,
-  GoldDivider,
-  GlassCard,
-  ErrorView,
-  GoldButton,
-} from "../components/common";
-import PageHeader from "../components/common/PageHeader";
-import SocialFAB from "../components/common/SocialFAB";
+import type { Event, EventType } from "../types/api.types";
+import { ErrorView } from "../components/common";
 import { EventCardSkeleton } from "../components/common/SkeletonLoader";
-import { useShare } from "../hooks/useShare";
+import SocialFAB from "../components/common/SocialFAB";
 import * as Haptics from "expo-haptics";
 
-const { width: SCREEN_WIDTH } = Dimensions.get("window");
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
-// ─── Date helpers (EST timezone) ──────────────────────────────────────────────
 const TZ = "America/Toronto";
 
-const formatEventDate = (dateString: string): string => {
-  const date = new Date(dateString);
-  return date.toLocaleDateString("en-US", {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-    timeZone: TZ,
-  });
-};
+const fmtDate = (s: string) =>
+  new Date(s).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: TZ });
 
-const formatEventTime = (dateString: string): string => {
-  const date = new Date(dateString);
-  return date.toLocaleTimeString("en-US", {
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true,
-    timeZone: TZ,
-  });
-};
+const fmtTime = (s: string) =>
+  new Date(s).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true, timeZone: TZ });
 
-const getEventDay = (dateString: string): number =>
-  parseInt(
-    new Date(dateString).toLocaleDateString("en-US", {
-      day: "numeric",
-      timeZone: TZ,
-    }),
-    10,
-  );
+const fmtDay = (s: string) =>
+  new Date(s).toLocaleDateString("en-US", { day: "numeric", timeZone: TZ });
 
-const getEventMonth = (dateString: string): string =>
-  new Date(dateString).toLocaleDateString("en-US", {
-    month: "short",
-    timeZone: TZ,
-  });
+const fmtMonth = (s: string) =>
+  new Date(s).toLocaleDateString("en-US", { month: "short", timeZone: TZ });
 
-// ─── Event period (duration/range) — ported from frontend ─────────────────────
-const getEventPeriod = (startDate: string, endDate: string): string => {
-  const start = new Date(startDate);
-  const end = new Date(endDate);
-
-  const startHour = parseInt(
-    start.toLocaleTimeString("en-US", {
-      hour: "numeric",
-      hour12: false,
-      timeZone: TZ,
-    }),
-  );
-  const startMinute = parseInt(
-    start.toLocaleTimeString("en-US", { minute: "numeric", timeZone: TZ }),
-  );
-  const endHour = parseInt(
-    end.toLocaleTimeString("en-US", {
-      hour: "numeric",
-      hour12: false,
-      timeZone: TZ,
-    }),
-  );
-  const endMinute = parseInt(
-    end.toLocaleTimeString("en-US", { minute: "numeric", timeZone: TZ }),
-  );
-
-  const fmtTime = (d: Date) =>
-    d.toLocaleTimeString("en-US", {
-      hour: "numeric",
-      minute: "2-digit",
-      hour12: true,
-      timeZone: TZ,
-    });
-
-  const isStartMidnight = startHour === 0 && startMinute === 0;
-  const isEndMidnight = endHour === 0 && endMinute === 0;
-
-  const startDateOnly = new Date(
-    start.toLocaleDateString("en-US", { timeZone: TZ }),
-  );
-  const endDateOnly = new Date(
-    end.toLocaleDateString("en-US", { timeZone: TZ }),
-  );
-  const dayDiff = Math.round(
-    (endDateOnly.getTime() - startDateOnly.getTime()) / (1000 * 60 * 60 * 24),
-  );
-
-  const displayEnd =
-    isEndMidnight && dayDiff >= 1 ? new Date(end.getTime() - 1) : end;
-
-  const startDay = start.toLocaleDateString("en-US", {
-    day: "numeric",
-    timeZone: TZ,
-  });
-  const startMonth = start.toLocaleDateString("en-US", {
-    month: "short",
-    timeZone: TZ,
-  });
-  const displayEndDay = displayEnd.toLocaleDateString("en-US", {
-    day: "numeric",
-    timeZone: TZ,
-  });
-  const displayEndMonth = displayEnd.toLocaleDateString("en-US", {
-    month: "short",
-    timeZone: TZ,
-  });
-
-  const displayEndDateOnly = new Date(
-    displayEnd.toLocaleDateString("en-US", { timeZone: TZ }),
-  );
-  const effectiveDayDiff = Math.round(
-    (displayEndDateOnly.getTime() - startDateOnly.getTime()) /
-      (1000 * 60 * 60 * 24),
-  );
-
-  // Same calendar day
-  if (dayDiff === 0) return `${fmtTime(start)} - ${fmtTime(end)}`;
-
-  // Overnight (ends next day before noon or at midnight)
-  if (dayDiff === 1 && (isEndMidnight || endHour < 12))
-    return `${fmtTime(start)} - ${fmtTime(end)}`;
-
-  // Single full day
-  if (dayDiff === 1 && isStartMidnight && isEndMidnight) {
-    const weekday = start.toLocaleDateString("en-US", {
-      weekday: "short",
-      timeZone: TZ,
-    });
-    return `${weekday}, ${startMonth} ${startDay}`;
+const shouldDisplay = (event: Event): boolean => {
+  if (!event.isActive) return false;
+  const now = new Date();
+  if (event.displayStartDate && event.displayEndDate) {
+    return now >= new Date(event.displayStartDate) && now <= new Date(event.displayEndDate);
   }
-
-  // Collapsed to same day after display-end adjustment
-  if (effectiveDayDiff === 0) {
-    const weekday = start.toLocaleDateString("en-US", {
-      weekday: "short",
-      timeZone: TZ,
-    });
-    return `${weekday}, ${startMonth} ${startDay}`;
-  }
-
-  // Multi-day range
-  if (startMonth === displayEndMonth)
-    return `${startMonth} ${startDay} - ${displayEndDay}`;
-  return `${startMonth} ${startDay} - ${displayEndMonth} ${displayEndDay}`;
+  return true;
 };
 
-// ─── Event styling helpers ────────────────────────────────────────────────────
-const EVENT_COLORS: Record<string, string> = {
-  live_music: colors.secondary.main,
-  sports_viewing: "#C5933E",
-  trivia_night: colors.secondary.dark,
-  karaoke: "#D4A857",
-  private_party: "#C9984A",
-  special_event: colors.secondary.main,
+const TYPE_CONFIG: Record<string, { label: string; icon: keyof typeof Ionicons.glyphMap; color: string }> = {
+  live_music:      { label: "Live Music",     icon: "musical-notes", color: "#7C3AED" },
+  sports_viewing:  { label: "Sports",         icon: "football",      color: "#1D4ED8" },
+  trivia_night:    { label: "Trivia Night",   icon: "help-circle",   color: "#0891B2" },
+  karaoke:         { label: "Karaoke",        icon: "mic",           color: "#BE185D" },
+  private_party:   { label: "Private Event",  icon: "people",        color: "#059669" },
+  special_event:   { label: "Special Event",  icon: "star",          color: colors.primary.main },
 };
 
-const EVENT_LABELS: Record<string, string> = {
-  live_music: "Live Music",
-  sports_viewing: "Sports",
-  trivia_night: "Trivia Night",
-  karaoke: "Karaoke",
-  private_party: "Private Event",
-  special_event: "Special Event",
-};
+const ALL_TYPES = Object.keys(TYPE_CONFIG);
 
-const getEventColor = (type: string) =>
-  EVENT_COLORS[type] ?? colors.secondary.main;
-const getEventLabel = (type: string) => EVENT_LABELS[type] ?? "Event";
+// ─── Event Detail Modal ───────────────────────────────────────────────────────
 
-// ─── Event type cards for "Host Your Event" section ───────────────────────────
-const HOST_EVENT_TYPES = [
-  {
-    icon: "gift-outline" as const,
-    title: "Birthday Parties",
-    desc: "Celebrate another trip around the sun",
-  },
-  {
-    icon: "school-outline" as const,
-    title: "Graduations",
-    desc: "Toast to their big achievement",
-  },
-  {
-    icon: "briefcase-outline" as const,
-    title: "Private Events",
-    desc: "Team building done right",
-  },
-  {
-    icon: "sparkles-outline" as const,
-    title: "Special Occasions",
-    desc: "Anniversaries, reunions & milestones",
-  },
-];
-
-const FEATURES = [
-  "Private & semi-private spaces for 100+ guests",
-  "Customizable food & drink packages",
-  "AV equipment for presentations",
-  "Dedicated event coordinator",
-  "Flexible booking times",
-];
-
-// ─── Diagonal Event Item ──────────────────────────────────────────────────────
-const EventItem = ({
+const EventDetailModal = ({
   event,
-  isPast = false,
-  onNavigateToContact,
-  index = 0,
+  visible,
+  onClose,
 }: {
-  event: Event;
-  isPast?: boolean;
-  onNavigateToContact: () => void;
-  index?: number;
+  event: Event | null;
+  visible: boolean;
+  onClose: () => void;
 }) => {
-  const [expanded, setExpanded] = useState(false);
-  const { shareEvent } = useShare();
-  const color = isPast ? colors.primary.light : getEventColor(event.type);
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(30)).current;
-
-  useEffect(() => {
-    const delay = index * 120;
-    const timer = setTimeout(() => {
-      Animated.parallel([
-        Animated.timing(fadeAnim, {
-          toValue: 1,
-          duration: 500,
-          useNativeDriver: true,
-        }),
-        Animated.timing(slideAnim, {
-          toValue: 0,
-          duration: 500,
-          useNativeDriver: true,
-        }),
-      ]).start();
-    }, delay);
-    return () => clearTimeout(timer);
-  }, []);
+  if (!event) return null;
+  const imageUrl = event.imageUrls?.[0] ? getImageUrl(event.imageUrls[0]) : null;
+  const cfg = TYPE_CONFIG[event.type] ?? TYPE_CONFIG.special_event;
+  const [viewerUri, setViewerUri] = useState<string | null>(null);
 
   return (
-    <Animated.View
-      style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}
-    >
-      <View style={styles.eventCard}>
-        {/* Image section */}
-        <View style={styles.eventImageSection}>
-          <Image
-            source={{
-              uri: event.imageUrls?.[0]
-                ? getImageUrl(event.imageUrls[0])
-                : "https://images.unsplash.com/photo-1470337458703-46ad1756a187?w=800&q=80",
-            }}
-            style={styles.eventImage}
-            contentFit="cover"
-            transition={300}
-          />
-          {/* Gradient overlay */}
-          <LinearGradient
-            colors={["transparent", colors.overlay.warmMedium]}
-            style={styles.eventImageOverlay}
-          />
-          {/* Type badge */}
-          <LinearGradient
-            colors={
-              isPast
-                ? [colors.primary.light, colors.primary.main]
-                : [color, `${color}DD`]
-            }
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.eventTypeBadge}
-          >
-            <Text style={styles.eventTypeBadgeText}>
-              {isPast ? "Past Event" : getEventLabel(event.type)}
-            </Text>
-          </LinearGradient>
-          {/* Date circle badge */}
-          <LinearGradient
-            colors={[color, `${color}DD`]}
-            style={styles.eventDateBadge}
-          >
-            <Text style={styles.eventDateDay}>
-              {getEventDay(event.eventStartDate)}
-            </Text>
-            <Text style={styles.eventDateMonth}>
-              {getEventMonth(event.eventStartDate)}
-            </Text>
-          </LinearGradient>
-          {/* Decorative frame border inside image */}
-          <View
-            style={[styles.eventImageFrame, { borderColor: `${color}40` }]}
-          />
-        </View>
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <Pressable style={styles.modalOverlay} onPress={onClose}>
+        <Pressable style={styles.modalSheet} onPress={() => {}}>
+          <View style={styles.modalHandle} />
 
-        {/* Content section */}
-        <View style={styles.eventContent}>
-          {/* Gold accent line */}
-          <LinearGradient
-            colors={
-              isPast
-                ? [colors.primary.light, colors.primary.main]
-                : [color, `${color}DD`]
-            }
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
-            style={styles.eventAccentLine}
-          />
-
-          <Text style={styles.eventTitle}>{event.title}</Text>
-
-          {/* Info pills */}
-          <View style={styles.eventInfoRow}>
-            {/* Event period badge (duration / date range) */}
-            {event.eventEndDate &&
-              event.eventEndDate !== event.eventStartDate && (
-                <View
-                  style={[
-                    styles.eventInfoPill,
-                    {
-                      borderColor: `${color}40`,
-                      backgroundColor: `${color}12`,
-                    },
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.eventInfoText,
-                      {
-                        color,
-                        fontWeight: "700",
-                        textTransform: "uppercase",
-                        fontSize: 10,
-                        letterSpacing: 0.5,
-                      },
-                    ]}
-                  >
-                    {getEventPeriod(event.eventStartDate, event.eventEndDate)}
-                  </Text>
-                </View>
-              )}
-            <View style={styles.eventInfoPill}>
-              <Ionicons name="calendar-outline" size={12} color={color} />
-              <Text style={styles.eventInfoText}>
-                {formatEventDate(event.eventStartDate)}
-              </Text>
-            </View>
-            <View style={styles.eventInfoPill}>
-              <Ionicons name="time-outline" size={12} color={color} />
-              <Text style={styles.eventInfoText}>
-                {formatEventTime(event.eventStartDate)}
-              </Text>
-            </View>
-            <View style={styles.eventInfoPill}>
-              <Ionicons name="location-outline" size={12} color={color} />
-              <Text style={styles.eventInfoText}>Brooklin Pub</Text>
-            </View>
-          </View>
-
-          {/* Description */}
-          <Text
-            style={styles.eventDescription}
-            numberOfLines={expanded ? undefined : 3}
-          >
-            {event.description}
-          </Text>
-
-          {/* Action buttons */}
-          <View style={styles.eventActions}>
-            <TouchableOpacity
-              style={styles.shareBtn}
-              onPress={() => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                shareEvent(event.title, event.description, formatEventDate(event.eventStartDate));
-              }}
-              activeOpacity={0.8}
-              hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
-            >
-              <Ionicons name="share-social-outline" size={18} color={color} />
-            </TouchableOpacity>
-            {event.ticketLink && (
-              <TouchableOpacity
-                style={styles.eventTicketBtn}
-                onPress={() => Linking.openURL(event.ticketLink!)}
-                activeOpacity={0.8}
-              >
-                <LinearGradient
-                  colors={[color, `${color}DD`]}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={styles.eventTicketBtnInner}
-                >
-                  <Text style={styles.eventTicketBtnText}>Get Tickets</Text>
-                  <Ionicons
-                    name="ticket-outline"
-                    size={14}
-                    color={colors.background.paper}
-                  />
-                </LinearGradient>
+          <ScrollView showsVerticalScrollIndicator={false} bounces={false}>
+            {/* Image or gradient banner */}
+            {imageUrl ? (
+              <TouchableOpacity activeOpacity={0.9} onPress={() => setViewerUri(imageUrl)} style={styles.modalBannerWrap}>
+                <Image source={{ uri: imageUrl }} style={styles.modalBanner} contentFit="contain" transition={300} />
               </TouchableOpacity>
+            ) : (
+              <LinearGradient
+                colors={[colors.primary.dark, colors.primary.main]}
+                style={[styles.modalBanner, { alignItems: "center", justifyContent: "center" }]}
+              >
+                <Ionicons name={cfg.icon} size={52} color={colors.secondary.main} />
+              </LinearGradient>
             )}
-            <TouchableOpacity
-              style={[
-                styles.eventLearnMoreBtn,
-                !event.ticketLink && { borderColor: color },
-              ]}
-              onPress={() => setExpanded(!expanded)}
-              activeOpacity={0.8}
-            >
-              {event.ticketLink ? (
-                <View
-                  style={[styles.eventLearnMoreInner, { borderColor: color }]}
-                >
-                  <Text style={[styles.eventLearnMoreText, { color }]}>
-                    {expanded ? "Show Less" : "Learn More"}
-                  </Text>
-                  <Ionicons
-                    name={expanded ? "chevron-up" : "arrow-forward"}
-                    size={14}
-                    color={color}
-                  />
+
+            <View style={styles.modalBody}>
+              {/* Type badge */}
+              <View style={[styles.typeBadge, { backgroundColor: cfg.color + "22", borderColor: cfg.color + "55" }]}>
+                <Ionicons name={cfg.icon} size={12} color={cfg.color} />
+                <Text style={[styles.typeBadgeText, { color: cfg.color }]}>{cfg.label}</Text>
+              </View>
+
+              {/* Title */}
+              <Text style={styles.modalTitle}>{event.title}</Text>
+
+              {/* Date / Time rows */}
+              <View style={styles.modalMeta}>
+                <View style={styles.modalMetaRow}>
+                  <View style={styles.metaIconWrap}>
+                    <Ionicons name="calendar-outline" size={16} color={colors.secondary.main} />
+                  </View>
+                  <View>
+                    <Text style={styles.metaLabel}>Date</Text>
+                    <Text style={styles.metaValue}>{fmtDate(event.eventStartDate)}</Text>
+                  </View>
                 </View>
-              ) : (
-                <LinearGradient
-                  colors={[color, `${color}DD`]}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={styles.eventTicketBtnInner}
+                <View style={styles.modalMetaRow}>
+                  <View style={styles.metaIconWrap}>
+                    <Ionicons name="time-outline" size={16} color={colors.secondary.main} />
+                  </View>
+                  <View>
+                    <Text style={styles.metaLabel}>Time</Text>
+                    <Text style={styles.metaValue}>
+                      {fmtTime(event.eventStartDate)} – {fmtTime(event.eventEndDate)}
+                    </Text>
+                  </View>
+                </View>
+              </View>
+
+              {/* Description */}
+              {event.description ? (
+                <Text style={styles.modalDesc}>{event.description}</Text>
+              ) : null}
+
+              {/* Actions */}
+              <View style={styles.modalActions}>
+                {event.ticketLink && (
+                  <TouchableOpacity
+                    style={styles.ticketBtn}
+                    onPress={() => Linking.openURL(event.ticketLink!)}
+                    activeOpacity={0.85}
+                  >
+                    <LinearGradient
+                      colors={[colors.secondary.main, colors.secondary.dark]}
+                      start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+                      style={styles.ticketBtnGradient}
+                    >
+                      <Ionicons name="ticket-outline" size={16} color="#1A0D0A" />
+                      <Text style={styles.ticketBtnText}>Get Tickets</Text>
+                    </LinearGradient>
+                  </TouchableOpacity>
+                )}
+
+                <TouchableOpacity
+                  style={styles.inquireBtn}
+                  onPress={() => Linking.openURL(`mailto:brooklinpubevents@gmail.com?subject=Event Inquiry: ${event.title}`)}
+                  activeOpacity={0.8}
                 >
-                  <Text style={styles.eventTicketBtnText}>
-                    {expanded ? "Show Less" : "Learn More"}
-                  </Text>
-                  <Ionicons
-                    name={expanded ? "chevron-up" : "arrow-forward"}
-                    size={14}
-                    color={colors.background.paper}
-                  />
-                </LinearGradient>
-              )}
-            </TouchableOpacity>
-          </View>
-        </View>
-      </View>
-    </Animated.View>
+                  <Ionicons name="mail-outline" size={16} color={colors.primary.main} />
+                  <Text style={styles.inquireBtnText}>Inquire</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </ScrollView>
+
+          <TouchableOpacity style={styles.modalCloseBtn} onPress={onClose} activeOpacity={0.8}>
+            <Text style={styles.modalCloseBtnText}>Close</Text>
+          </TouchableOpacity>
+        </Pressable>
+      </Pressable>
+
+      <ImageViewer uri={viewerUri} visible={!!viewerUri} onClose={() => setViewerUri(null)} />
+    </Modal>
   );
 };
 
-// ═══════════════════════════════════════════════════════════════════
-// MAIN SCREEN
-// ═══════════════════════════════════════════════════════════════════
+// ─── Event Card ───────────────────────────────────────────────────────────────
+
+const EventCard = React.memo(({
+  event,
+  onPress,
+}: {
+  event: Event;
+  onPress: () => void;
+}) => {
+  const imageUrl = event.imageUrls?.[0] ? getImageUrl(event.imageUrls[0]) : null;
+  const cfg = TYPE_CONFIG[event.type] ?? TYPE_CONFIG.special_event;
+
+  return (
+    <TouchableOpacity style={styles.eventCard} onPress={onPress} activeOpacity={0.85}>
+      {/* Date badge */}
+      <View style={styles.dateBadge}>
+        <Text style={styles.dateBadgeDay}>{fmtDay(event.eventStartDate)}</Text>
+        <Text style={styles.dateBadgeMonth}>{fmtMonth(event.eventStartDate)}</Text>
+      </View>
+
+      {/* Main content */}
+      <View style={styles.cardContent}>
+        {/* Image */}
+        {imageUrl ? (
+          <Image source={{ uri: imageUrl }} style={styles.cardImage} contentFit="cover" transition={300} />
+        ) : (
+          <LinearGradient
+            colors={[colors.primary.dark, colors.primary.main]}
+            style={[styles.cardImage, { alignItems: "center", justifyContent: "center" }]}
+          >
+            <Ionicons name={cfg.icon} size={24} color={colors.secondary.main} />
+          </LinearGradient>
+        )}
+
+        {/* Info */}
+        <View style={styles.cardInfo}>
+          <View style={[styles.cardTypePill, { backgroundColor: cfg.color + "18", borderColor: cfg.color + "44" }]}>
+            <Ionicons name={cfg.icon} size={11} color={cfg.color} />
+            <Text style={[styles.cardTypePillText, { color: cfg.color }]}>{cfg.label}</Text>
+          </View>
+
+          <Text style={styles.cardTitle} numberOfLines={2}>{event.title}</Text>
+
+          <View style={styles.cardMeta}>
+            <Ionicons name="time-outline" size={12} color={colors.text.muted} />
+            <Text style={styles.cardMetaText}>
+              {fmtDate(event.eventStartDate)} · {fmtTime(event.eventStartDate)}
+            </Text>
+          </View>
+
+          {event.ticketLink && (
+            <View style={styles.ticketsAvailablePill}>
+              <Ionicons name="ticket-outline" size={11} color={colors.secondary.dark} />
+              <Text style={styles.ticketsAvailableText}>Tickets Available</Text>
+            </View>
+          )}
+        </View>
+
+        <Ionicons name="chevron-forward" size={16} color={colors.text.muted} />
+      </View>
+    </TouchableOpacity>
+  );
+});
+
+// ─── Main Screen ──────────────────────────────────────────────────────────────
+
 export default function EventsScreen({ navigation }: any) {
   const insets = useSafeAreaInsets();
+  const { width: screenWidth } = useWindowDimensions();
+  const [activeFilter, setActiveFilter] = useState<string | null>(null);
+  const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
+  const [showModal, setShowModal] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
   const {
-    data: eventsData,
+    data: events,
     loading,
     error,
     refetch,
-  } = useApiWithCache<Event[]>("all-events-page", () =>
-    eventsService.getAllEvents(),
-  );
+  } = useApiWithCache<Event[]>("active-events", () => eventsService.getActiveEvents());
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -511,65 +275,81 @@ export default function EventsScreen({ navigation }: any) {
     setRefreshing(false);
   }, [refetch]);
 
-  const { upcomingEvents, pastEvents } = useMemo(() => {
-    if (!eventsData)
-      return { upcomingEvents: [] as Event[], pastEvents: [] as Event[] };
-    const now = new Date();
-    const upcoming: Event[] = [];
-    const past: Event[] = [];
+  const sortedEvents = useMemo((): Event[] => {
+    if (!events) return [];
+    return events
+      .filter(shouldDisplay)
+      .sort((a, b) => new Date(a.eventStartDate).getTime() - new Date(b.eventStartDate).getTime());
+  }, [events]);
 
-    eventsData
-      .filter((e) => e.isActive)
-      .forEach((event) => {
-        const end = new Date(event.eventEndDate);
-        (end >= now ? upcoming : past).push(event);
-      });
+  const filteredEvents = useMemo(() => {
+    if (!activeFilter) return sortedEvents;
+    return sortedEvents.filter((e) => (e.type as string) === activeFilter);
+  }, [sortedEvents, activeFilter]);
 
-    upcoming.sort(
-      (a, b) =>
-        new Date(a.eventStartDate).getTime() -
-        new Date(b.eventStartDate).getTime(),
-    );
-    past.sort(
-      (a, b) =>
-        new Date(b.eventStartDate).getTime() -
-        new Date(a.eventStartDate).getTime(),
-    );
-
-    return { upcomingEvents: upcoming, pastEvents: past };
-  }, [eventsData]);
-
-  // Group events by month
-  const groupByMonth = useCallback((events: Event[]) => {
-    const grouped: Record<string, Event[]> = {};
-    events.forEach((event) => {
-      const key = new Date(event.eventStartDate).toLocaleDateString("en-US", {
-        month: "long",
-        year: "numeric",
-      });
-      if (!grouped[key]) grouped[key] = [];
-      grouped[key].push(event);
-    });
-    return grouped;
-  }, []);
-
-  const upcomingByMonth = useMemo(
-    () => groupByMonth(upcomingEvents),
-    [upcomingEvents],
-  );
-  const pastByMonth = useMemo(() => groupByMonth(pastEvents), [pastEvents]);
-
-  const navigateToContact = useCallback(() => {
-    navigation.navigate("ContactTab");
-  }, [navigation]);
+  // Build filter chips from event types present in data
+  const presentTypes = useMemo(() => {
+    const types = new Set(sortedEvents.map((e) => e.type));
+    return ALL_TYPES.filter((t) => types.has(t as any));
+  }, [sortedEvents]);
 
   if (error) return <ErrorView message={error} onRetry={refetch} />;
 
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
+      {/* ── Header ── */}
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>Events</Text>
+        <Text style={styles.headerSubtitle}>
+          {sortedEvents.length > 0
+            ? `${sortedEvents.length} upcoming event${sortedEvents.length !== 1 ? "s" : ""}`
+            : "What's on at Brooklin Pub"}
+        </Text>
+      </View>
+
+      {/* ── Type Filter Chips ── */}
+      {presentTypes.length > 0 && (
+        <View style={styles.filterRow}>
+          <FlatList
+            horizontal
+            data={[null, ...presentTypes]}
+            keyExtractor={(item) => item ?? "all"}
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.filterScrollContent}
+            renderItem={({ item }) => {
+              const isActive = item === activeFilter;
+              const cfg = item ? TYPE_CONFIG[item] : null;
+              return (
+                <TouchableOpacity
+                  style={[styles.filterChip, isActive && styles.filterChipActive]}
+                  onPress={() => {
+                    Haptics.selectionAsync();
+                    setActiveFilter(item);
+                  }}
+                  activeOpacity={0.75}
+                >
+                  {cfg && (
+                    <Ionicons
+                      name={cfg.icon}
+                      size={13}
+                      color={isActive ? "#FFFDFB" : cfg.color}
+                    />
+                  )}
+                  <Text style={[styles.filterChipText, isActive && styles.filterChipTextActive]}>
+                    {item ? TYPE_CONFIG[item].label : "All Events"}
+                  </Text>
+                </TouchableOpacity>
+              );
+            }}
+          />
+        </View>
+      )}
+
+      {/* ── Events List ── */}
       <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 100 }]}
         showsVerticalScrollIndicator={false}
-        bounces={true}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -578,691 +358,487 @@ export default function EventsScreen({ navigation }: any) {
             colors={[colors.secondary.main]}
           />
         }
-        contentContainerStyle={{ paddingBottom: insets.bottom + 88 }}
       >
-        {/* Page header */}
-        <PageHeader
-          title="Events"
-          subtitle="Trivia nights, live music, game days & more"
-          icon="calendar-outline"
-        />
-
         {loading ? (
-          <View style={styles.skeletonContainer}>
-            {[1, 2, 3].map((i) => (
-              <EventCardSkeleton key={i} />
-            ))}
+          <View style={styles.skeletonWrap}>
+            {[1, 2, 3].map((i) => <EventCardSkeleton key={i} />)}
           </View>
-        ) : (
-          <>
-
-        {/* ════ Upcoming Events ════ */}
-        {upcomingEvents.length === 0 && pastEvents.length === 0 ? (
+        ) : filteredEvents.length === 0 ? (
           <View style={styles.emptyState}>
-            <View style={styles.emptyIcon}>
-              <Ionicons
-                name="calendar-outline"
-                size={36}
-                color={colors.secondary.main}
-              />
-            </View>
-            <Text style={styles.emptyTitle}>No Events Yet</Text>
-            <Text style={styles.emptyText}>
-              We're planning something special! Check back soon for upcoming
-              events.
+            <Ionicons name="calendar-outline" size={52} color={colors.border.gold} />
+            <Text style={styles.emptyTitle}>
+              {activeFilter ? "No events of this type" : "No Upcoming Events"}
             </Text>
-          </View>
-        ) : (
-          <>
-            {upcomingEvents.length > 0 ? (
-              Object.entries(upcomingByMonth).map(([monthYear, events]) => (
-                <View key={monthYear} style={styles.monthGroup}>
-                  {/* Month header */}
-                  <View style={styles.monthHeader}>
-                    <Text style={styles.monthTitle}>{monthYear}</Text>
-                    <View style={styles.monthLine} />
-                    <View style={styles.monthCountBadge}>
-                      <Text style={styles.monthCountText}>
-                        {events.length} event{events.length > 1 ? "s" : ""}
-                      </Text>
-                    </View>
-                  </View>
-                  {events.map((event, idx) => (
-                    <EventItem
-                      key={event.id}
-                      event={event}
-                      index={idx}
-                      onNavigateToContact={navigateToContact}
-                    />
-                  ))}
-                </View>
-              ))
-            ) : (
-              <View style={styles.emptyState}>
-                <View style={styles.emptyIcon}>
-                  <Ionicons
-                    name="calendar-outline"
-                    size={28}
-                    color={colors.secondary.main}
-                  />
-                </View>
-                <Text style={styles.emptyTitle}>No Upcoming Events</Text>
-                <Text style={styles.emptyText}>
-                  Check back soon for new events!
-                </Text>
-              </View>
+            <Text style={styles.emptyDesc}>
+              {activeFilter
+                ? "Try a different filter or check back later."
+                : "We're always planning something new. Check back soon!"}
+            </Text>
+            {activeFilter && (
+              <TouchableOpacity
+                style={styles.clearFilterBtn}
+                onPress={() => setActiveFilter(null)}
+              >
+                <Text style={styles.clearFilterText}>Show All Events</Text>
+              </TouchableOpacity>
             )}
 
-            {/* ════ Past Events ════ */}
-            {pastEvents.length > 0 && (
-              <View style={styles.pastSection}>
-                <View style={styles.sectionHeaderWrap}>
-                  <Text style={styles.sectionTitle}>Past Events</Text>
-                </View>
-
-                {Object.entries(pastByMonth).map(([monthYear, events]) => (
-                  <View
-                    key={monthYear}
-                    style={[styles.monthGroup, { opacity: 0.85 }]}
-                  >
-                    <View style={styles.monthHeader}>
-                      <Text style={[styles.monthTitle, { opacity: 0.8 }]}>
-                        {monthYear}
-                      </Text>
-                      <View
-                        style={[
-                          styles.monthLine,
-                          { backgroundColor: "rgba(139,90,43,0.3)" },
-                        ]}
-                      />
-                      <View
-                        style={[
-                          styles.monthCountBadge,
-                          {
-                            backgroundColor: "rgba(139,90,43,0.15)",
-                            borderColor: "rgba(139,90,43,0.2)",
-                          },
-                        ]}
-                      >
-                        <Text style={styles.monthCountText}>
-                          {events.length} event{events.length > 1 ? "s" : ""}
-                        </Text>
-                      </View>
-                    </View>
-                    {events.map((event, idx) => (
-                      <EventItem
-                        key={event.id}
-                        event={event}
-                        isPast
-                        index={idx}
-                        onNavigateToContact={navigateToContact}
-                      />
-                    ))}
-                  </View>
-                ))}
-              </View>
-            )}
-          </>
-        )}
-
-        {/* ════ Host Your Event ════ */}
-        <LinearGradient
-          colors={["#F5EBE0", "#E8D5C4", "#DBC7B0"]}
-          style={styles.hostSection}
-        >
-          <Text style={styles.hostOverline}>◆ Book Brooklin Pub ◆</Text>
-          <Text style={styles.hostTitle}>
-            Host Your Next{" "}
-            <Text style={{ color: colors.secondary.main }}>Celebration</Text>
-          </Text>
-          <Text style={styles.hostDesc}>
-            From milestone birthdays to corporate gatherings, we've got the
-            space, the food, and the vibe to make your event one for the books.
-          </Text>
-
-          {/* Event type cards */}
-          <View style={styles.hostTypesGrid}>
-            {HOST_EVENT_TYPES.map((item, i) => (
-              <GlassCard key={i} style={styles.hostTypeCard}>
-                <Ionicons
-                  name={item.icon}
-                  size={32}
-                  color={colors.secondary.main}
-                />
-                <Text style={styles.hostTypeTitle}>{item.title}</Text>
-                <Text style={styles.hostTypeDesc}>{item.desc}</Text>
-              </GlassCard>
-            ))}
-          </View>
-
-          {/* Features + CTA */}
-          <GlassCard style={styles.hostFeaturesCard}>
-            <Text style={styles.hostFeaturesTitle}>What We Offer</Text>
-            {FEATURES.map((feature, i) => (
-              <View key={i} style={styles.featureRow}>
+            {/* Host an event CTA */}
+            <View style={styles.hostCTA}>
+              <LinearGradient
+                colors={[colors.primary.dark, "#2A1208"]}
+                style={StyleSheet.absoluteFillObject}
+              />
+              <Text style={styles.hostCTATitle}>Host Your Event Here</Text>
+              <Text style={styles.hostCTADesc}>
+                Birthdays, corporate events, sports watch parties and more.
+              </Text>
+              <TouchableOpacity
+                style={styles.hostCTABtn}
+                onPress={() => navigation.navigate("InfoTab", { screen: "Contact" })}
+                activeOpacity={0.85}
+              >
                 <LinearGradient
                   colors={[colors.secondary.main, colors.secondary.dark]}
-                  style={styles.featureCheckCircle}
+                  start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+                  style={styles.hostCTABtnGradient}
                 >
-                  <Text style={styles.featureCheck}>✓</Text>
+                  <Text style={styles.hostCTABtnText}>Get In Touch</Text>
                 </LinearGradient>
-                <Text style={styles.featureText}>{feature}</Text>
-              </View>
+              </TouchableOpacity>
+            </View>
+          </View>
+        ) : (
+          <View style={styles.eventsList}>
+            {filteredEvents.map((event) => (
+              <EventCard
+                key={event.id}
+                event={event}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  setSelectedEvent(event);
+                  setShowModal(true);
+                }}
+              />
             ))}
 
-            <View style={styles.hostCTABox}>
+            {/* Host CTA at bottom */}
+            <View style={[styles.hostCTA, { marginTop: spacing.base }]}>
               <LinearGradient
-                colors={["#8B5A3C", colors.primary.main]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.hostCTAInner}
+                colors={[colors.primary.dark, "#2A1208"]}
+                style={StyleSheet.absoluteFillObject}
+              />
+              <Text style={styles.hostCTATitle}>Host Your Own Event</Text>
+              <Text style={styles.hostCTADesc}>
+                Private parties, corporate events, live music bookings.
+              </Text>
+              <TouchableOpacity
+                style={styles.hostCTABtn}
+                onPress={() => navigation.navigate("InfoTab", { screen: "Contact" })}
+                activeOpacity={0.85}
               >
-                <View style={styles.hostCTAIcon}>
-                  <Ionicons
-                    name="calendar-outline"
-                    size={24}
-                    color={colors.secondary.main}
-                  />
-                </View>
-                <Text style={styles.hostCTATitle}>Ready to Plan?</Text>
-                <Text style={styles.hostCTADesc}>
-                  Let's make your event special
-                </Text>
-                <TouchableOpacity
-                  activeOpacity={0.8}
-                  onPress={navigateToContact}
+                <LinearGradient
+                  colors={[colors.secondary.main, colors.secondary.dark]}
+                  start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+                  style={styles.hostCTABtnGradient}
                 >
-                  <LinearGradient
-                    colors={[colors.secondary.main, colors.secondary.dark]}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                    style={styles.hostCTAButton}
-                  >
-                    <Text style={styles.hostCTAButtonText}>
-                      Book Your Event
-                    </Text>
-                    <Ionicons
-                      name="arrow-forward"
-                      size={16}
-                      color={colors.background.paper}
-                    />
-                  </LinearGradient>
-                </TouchableOpacity>
-              </LinearGradient>
+                  <Text style={styles.hostCTABtnText}>Contact Us</Text>
+                </LinearGradient>
+              </TouchableOpacity>
             </View>
-          </GlassCard>
-        </LinearGradient>
-          </>
+          </View>
         )}
-
       </ScrollView>
 
-      {/* Floating call FAB */}
+      {/* ── Event Detail Modal ── */}
+      <EventDetailModal
+        event={selectedEvent}
+        visible={showModal}
+        onClose={() => setShowModal(false)}
+      />
+
       <SocialFAB />
     </View>
   );
 }
 
-// ═══════════════════════════════════════════════════════════════════
-// STYLES
-// ═══════════════════════════════════════════════════════════════════
+// ─── Styles ───────────────────────────────────────────────────────────────────
+
 const styles = StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: colors.background.default,
   },
-  skeletonContainer: {
-    paddingHorizontal: spacing.base,
-    paddingTop: spacing.xl,
-  },
 
-  /* Section header */
-  sectionHeaderWrap: {
-    alignItems: "center",
-    paddingVertical: spacing.xl,
+  // ── Header
+  header: {
     paddingHorizontal: spacing.base,
+    paddingTop: spacing.base,
+    paddingBottom: spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border.light,
   },
-  sectionOverline: {
-    color: colors.secondary.main,
-    letterSpacing: 3,
-    fontSize: typography.fontSize.xs,
-    fontWeight: typography.fontWeight.semibold,
-    textTransform: "uppercase",
-    marginBottom: spacing.sm,
-  },
-  sectionTitle: {
+  headerTitle: {
     fontFamily: typography.fontFamily.heading,
-    fontSize: typography.fontSize["2xl"],
-    color: colors.primary.dark,
-    textAlign: "center",
-    letterSpacing: -0.3,
+    fontSize: typography.fontSize["3xl"],
+    color: colors.text.primary,
+  },
+  headerSubtitle: {
+    fontFamily: typography.fontFamily.bodyMedium,
+    fontSize: typography.fontSize.sm,
+    color: colors.text.muted,
+    marginTop: 2,
   },
 
-  /* Month group */
-  monthGroup: {
+  // ── Filter
+  filterRow: {
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border.light,
+    backgroundColor: colors.background.default,
+  },
+  filterScrollContent: {
     paddingHorizontal: spacing.base,
-    marginBottom: spacing.xl,
-  },
-  monthHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.md,
-    marginBottom: spacing.lg,
-  },
-  monthTitle: {
-    fontFamily: typography.fontFamily.heading,
-    fontSize: 22,
-    color: colors.primary.dark,
-    letterSpacing: -0.2,
-  },
-  monthLine: {
-    flex: 1,
-    height: 2,
-    backgroundColor: colors.border.goldStrong,
-    borderRadius: 1,
-  },
-  monthCountBadge: {
-    backgroundColor: colors.glass.gold,
-    borderWidth: 1,
-    borderColor: colors.border.gold,
-    borderRadius: borderRadius.full,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
-  },
-  monthCountText: {
-    fontFamily: typography.fontFamily.bodyBold,
-    fontSize: typography.fontSize.xs,
-    color: colors.primary.main,
-  },
-
-  /* Event card */
-  eventCard: {
-    marginBottom: spacing.xl,
-    borderRadius: borderRadius.lg,
-    backgroundColor: "rgba(255,255,255,0.95)",
-    borderWidth: 1,
-    borderColor: colors.border.light,
-    overflow: "hidden",
-    ...shadows.card,
-  },
-  eventImageSection: {
-    width: "100%",
-    height: 220,
-    position: "relative",
-  },
-  eventImage: {
-    width: "100%",
-    height: "100%",
-  },
-  eventImageOverlay: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: "50%",
-  },
-  eventImageFrame: {
-    position: "absolute",
-    top: 8,
-    left: 8,
-    right: 8,
-    bottom: 8,
-    borderWidth: 2,
-    borderRadius: borderRadius.lg,
-  },
-  eventTypeBadge: {
-    position: "absolute",
-    top: spacing.md,
-    left: spacing.md,
-    paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
-    borderRadius: borderRadius.sm,
-    zIndex: 5,
-  },
-  eventTypeBadgeText: {
-    fontFamily: typography.fontFamily.bodySemibold,
-    fontSize: 10,
-    color: colors.background.paper,
-    textTransform: "uppercase",
-    letterSpacing: 1.2,
-  },
-  eventDateBadge: {
-    position: "absolute",
-    bottom: spacing.md,
-    right: spacing.md,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    borderWidth: 3,
-    borderColor: colors.background.paper,
-    alignItems: "center",
-    justifyContent: "center",
-    zIndex: 5,
-  },
-  eventDateDay: {
-    fontFamily: typography.fontFamily.heading,
-    fontSize: typography.fontSize.xl,
-    color: colors.background.paper,
-    lineHeight: 24,
-  },
-  eventDateMonth: {
-    fontFamily: typography.fontFamily.bodyBold,
-    fontSize: 9,
-    color: colors.background.paper,
-    textTransform: "uppercase",
-  },
-
-  /* Event content */
-  eventContent: {
-    padding: spacing.lg,
-  },
-  eventAccentLine: {
-    width: 60,
-    height: 3,
-    borderRadius: 2,
-    marginBottom: spacing.md,
-  },
-  eventTitle: {
-    fontFamily: typography.fontFamily.heading,
-    fontSize: typography.fontSize.xl,
-    color: colors.primary.dark,
-    marginBottom: spacing.md,
-    lineHeight: typography.fontSize.xl * 1.25,
-  },
-  eventInfoRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
     gap: spacing.sm,
-    marginBottom: spacing.md,
   },
-  eventInfoPill: {
+  filterChip: {
     flexDirection: "row",
     alignItems: "center",
     gap: 5,
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
-    backgroundColor: colors.glass.gold,
+    paddingVertical: spacing.sm - 2,
     borderRadius: borderRadius.full,
-    borderWidth: 1,
-    borderColor: colors.border.gold,
-  },
-  eventInfoText: {
-    fontFamily: typography.fontFamily.bodySemibold,
-    fontSize: 11,
-    color: colors.primary.main,
-  },
-  eventDescription: {
-    fontFamily: typography.fontFamily.body,
-    fontSize: typography.fontSize.sm,
-    color: "rgba(60,31,14,0.75)",
-    lineHeight: typography.fontSize.sm * 1.85,
-    marginBottom: spacing.md,
-  },
-  eventActions: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: spacing.md,
-    alignItems: "center",
-  },
-  shareBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: colors.border.gold,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: colors.glass.gold,
-  },
-  eventTicketBtn: {
-    borderRadius: borderRadius.full,
-    overflow: "hidden",
-  },
-  eventTicketBtnInner: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.sm,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    borderRadius: borderRadius.full,
-  },
-  eventTicketBtnText: {
-    fontFamily: typography.fontFamily.bodySemibold,
-    fontSize: 12,
-    color: colors.background.paper,
-    textTransform: "uppercase",
-    letterSpacing: 1.2,
-  },
-  eventLearnMoreBtn: {
-    borderRadius: borderRadius.full,
-    overflow: "hidden",
-  },
-  eventLearnMoreInner: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.sm,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md - 1,
-    borderRadius: borderRadius.full,
-    borderWidth: 2,
-  },
-  eventLearnMoreText: {
-    fontFamily: typography.fontFamily.bodySemibold,
-    fontSize: 12,
-    textTransform: "uppercase",
-    letterSpacing: 1.2,
-  },
-
-  /* Empty state */
-  emptyState: {
-    alignItems: "center",
-    paddingVertical: spacing["2xl"],
-    paddingHorizontal: spacing.xl,
-    marginHorizontal: spacing.base,
-    backgroundColor: "rgba(255,255,255,0.8)",
-    borderRadius: borderRadius.xl,
-    borderWidth: 2,
-    borderStyle: "dashed",
-    borderColor: colors.border.gold,
-  },
-  emptyIcon: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: colors.glass.gold,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: spacing.lg,
-  },
-  emptyTitle: {
-    fontFamily: typography.fontFamily.heading,
-    fontSize: typography.fontSize.xl,
-    color: colors.primary.main,
-    marginBottom: spacing.sm,
-  },
-  emptyText: {
-    fontFamily: typography.fontFamily.body,
-    fontSize: typography.fontSize.base,
-    color: colors.primary.light,
-    lineHeight: typography.fontSize.base * 1.7,
-    textAlign: "center",
-  },
-
-  /* Past section */
-  pastSection: {
-    marginTop: spacing.xl,
-    opacity: 0.75,
-  },
-
-  /* More coming soon */
-  moreComingSoon: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: spacing.sm,
-    paddingVertical: spacing.xl,
-    paddingHorizontal: spacing.base,
-  },
-  moreComingLine: {
-    width: 30,
-    height: 1,
-    backgroundColor: "rgba(217,167,86,0.5)",
-  },
-  moreComingDiamond: {
-    width: 10,
-    height: 10,
+    backgroundColor: colors.background.paper,
     borderWidth: 1.5,
-    borderColor: colors.secondary.main,
-    transform: [{ rotate: "45deg" }],
-    opacity: 0.6,
+    borderColor: colors.border.light,
   },
-  moreComingText: {
-    fontFamily: typography.fontFamily.bodySemibold,
-    fontSize: 10,
-    color: "rgba(217,167,86,0.8)",
-    letterSpacing: 2.5,
-    textTransform: "uppercase",
-    textAlign: "center",
+  filterChipActive: {
+    backgroundColor: colors.primary.main,
+    borderColor: colors.primary.main,
+  },
+  filterChipText: {
+    fontFamily: typography.fontFamily.bodyMedium,
+    fontSize: typography.fontSize.sm,
+    color: colors.text.muted,
+  },
+  filterChipTextActive: {
+    color: "#FFFDFB",
   },
 
-  /* Host section */
-  hostSection: {
-    paddingVertical: spacing["2xl"],
-    paddingHorizontal: spacing.base,
+  // ── Scroll
+  scroll: { flex: 1 },
+  scrollContent: { paddingTop: spacing.base },
+  skeletonWrap: { paddingHorizontal: spacing.base },
+  eventsList: { paddingHorizontal: spacing.base },
+
+  // ── Event Card
+  eventCard: {
+    flexDirection: "row",
+    backgroundColor: colors.background.paper,
+    borderRadius: borderRadius.lg,
+    marginBottom: spacing.sm,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: colors.border.light,
+    ...shadows.sm,
   },
-  hostOverline: {
-    textAlign: "center",
-    color: colors.secondary.main,
-    fontSize: typography.fontSize.xs,
-    fontWeight: typography.fontWeight.semibold,
-    letterSpacing: 2.5,
-    textTransform: "uppercase",
-    marginBottom: spacing.md,
+  dateBadge: {
+    width: 52,
+    paddingVertical: spacing.md,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.primary.main,
+    alignSelf: "stretch",
   },
-  hostTitle: {
-    textAlign: "center",
+  dateBadgeDay: {
     fontFamily: typography.fontFamily.heading,
     fontSize: typography.fontSize["2xl"],
-    color: colors.primary.dark,
-    marginBottom: spacing.md,
-    lineHeight: typography.fontSize["2xl"] * 1.2,
+    color: colors.secondary.main,
+    lineHeight: 28,
   },
-  hostDesc: {
-    textAlign: "center",
+  dateBadgeMonth: {
+    fontFamily: typography.fontFamily.bodySemibold,
+    fontSize: typography.fontSize.xs - 1,
+    color: "rgba(217,167,86,0.7)",
+    letterSpacing: 0.5,
+    textTransform: "uppercase",
+  },
+  cardContent: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingRight: spacing.sm,
+  },
+  cardImage: {
+    width: 72,
+    height: 72,
+    margin: spacing.sm,
+    borderRadius: borderRadius.md,
+  },
+  cardInfo: {
+    flex: 1,
+    paddingVertical: spacing.sm,
+    paddingRight: spacing.xs,
+    gap: 4,
+  },
+  cardTypePill: {
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+    borderRadius: borderRadius.full,
+    borderWidth: 1,
+  },
+  cardTypePillText: {
+    fontFamily: typography.fontFamily.bodyMedium,
+    fontSize: 10,
+    letterSpacing: 0.2,
+  },
+  cardTitle: {
+    fontFamily: typography.fontFamily.headingMedium,
+    fontSize: typography.fontSize.base,
+    color: colors.text.primary,
+    lineHeight: 21,
+  },
+  cardMeta: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  cardMetaText: {
+    fontFamily: typography.fontFamily.body,
+    fontSize: typography.fontSize.xs,
+    color: colors.text.muted,
+  },
+  ticketsAvailablePill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+  },
+  ticketsAvailableText: {
+    fontFamily: typography.fontFamily.bodyMedium,
+    fontSize: 10,
+    color: colors.secondary.dark,
+  },
+
+  // ── Empty State
+  emptyState: {
+    alignItems: "center",
+    paddingVertical: spacing["3xl"],
+    paddingHorizontal: spacing.xl,
+    gap: spacing.sm,
+  },
+  emptyTitle: {
+    fontFamily: typography.fontFamily.headingMedium,
+    fontSize: typography.fontSize.xl,
+    color: colors.text.primary,
+    marginTop: spacing.sm,
+  },
+  emptyDesc: {
     fontFamily: typography.fontFamily.body,
     fontSize: typography.fontSize.base,
-    color: colors.primary.main,
-    lineHeight: typography.fontSize.base * 1.8,
-    marginBottom: spacing.xl,
-    maxWidth: 400,
-    alignSelf: "center",
-  },
-  hostTypesGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: spacing.md,
-    marginBottom: spacing.xl,
-  },
-  hostTypeCard: {
-    width: (SCREEN_WIDTH - spacing.base * 2 - spacing.md) / 2,
-    alignItems: "center",
-    padding: spacing.lg,
-  },
-  hostTypeTitle: {
-    fontFamily: typography.fontFamily.heading,
-    fontSize: typography.fontSize.md,
-    color: colors.primary.dark,
+    color: colors.text.muted,
     textAlign: "center",
-    marginTop: spacing.sm,
-    marginBottom: spacing.xs,
+    lineHeight: 22,
+    maxWidth: "85%",
   },
-  hostTypeDesc: {
-    fontFamily: typography.fontFamily.body,
+  clearFilterBtn: {
+    marginTop: spacing.md,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.md,
+    backgroundColor: colors.primary.main,
+    borderRadius: borderRadius.full,
+  },
+  clearFilterText: {
+    fontFamily: typography.fontFamily.bodySemibold,
     fontSize: typography.fontSize.sm,
-    color: colors.primary.main,
-    textAlign: "center",
+    color: "#FFFDFB",
   },
 
-  /* Features + CTA */
-  hostFeaturesCard: {
-    padding: spacing.xl,
-  },
-  hostFeaturesTitle: {
-    fontFamily: typography.fontFamily.heading,
-    fontSize: typography.fontSize.xl,
-    color: colors.primary.dark,
-    marginBottom: spacing.lg,
-  },
-  featureRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.md,
-    marginBottom: spacing.md,
-  },
-  featureCheckCircle: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  featureCheck: {
-    color: "#fff",
-    fontSize: 10,
-    fontWeight: "700",
-  },
-  featureText: {
-    flex: 1,
-    fontFamily: typography.fontFamily.body,
-    fontSize: typography.fontSize.sm,
-    color: colors.primary.dark,
-  },
-
-  /* CTA box */
-  hostCTABox: {
-    marginTop: spacing.xl,
+  // ── Host CTA
+  hostCTA: {
+    marginHorizontal: 0,
     borderRadius: borderRadius.xl,
     overflow: "hidden",
-  },
-  hostCTAInner: {
-    alignItems: "center",
     padding: spacing.xl,
-    borderRadius: borderRadius.xl,
-  },
-  hostCTAIcon: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    backgroundColor: "rgba(217,167,86,0.2)",
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: spacing.md,
+    gap: spacing.sm,
+    marginBottom: spacing.base,
   },
   hostCTATitle: {
     fontFamily: typography.fontFamily.heading,
-    fontSize: typography.fontSize.lg,
-    color: colors.background.paper,
-    marginBottom: spacing.xs,
+    fontSize: typography.fontSize["2xl"],
+    color: "#FFFDFB",
   },
   hostCTADesc: {
     fontFamily: typography.fontFamily.body,
-    fontSize: typography.fontSize.sm,
-    color: "rgba(255,253,251,0.8)",
-    marginBottom: spacing.lg,
+    fontSize: typography.fontSize.base,
+    color: "rgba(255,253,251,0.65)",
+    lineHeight: 22,
   },
-  hostCTAButton: {
+  hostCTABtn: {
+    marginTop: spacing.sm,
+    borderRadius: borderRadius.full,
+    overflow: "hidden",
+    alignSelf: "flex-start",
+  },
+  hostCTABtnGradient: {
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.md,
+  },
+  hostCTABtnText: {
+    fontFamily: typography.fontFamily.bodySemibold,
+    fontSize: typography.fontSize.sm,
+    color: "#1A0D0A",
+  },
+
+  // ── Modal
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.55)",
+    justifyContent: "flex-end",
+  },
+  modalSheet: {
+    backgroundColor: colors.background.paper,
+    borderTopLeftRadius: borderRadius["2xl"],
+    borderTopRightRadius: borderRadius["2xl"],
+    maxHeight: "90%",
+    ...shadows.lg,
+  },
+  modalHandle: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: colors.border.gold,
+    alignSelf: "center",
+    marginTop: spacing.md,
+    marginBottom: spacing.sm,
+  },
+  modalBannerWrap: {
+    position: "relative",
+  },
+  modalBanner: {
+    width: "100%",
+    aspectRatio: 4 / 3,
+  },
+  modalBody: {
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.base,
+    paddingBottom: spacing.sm,
+  },
+  typeBadge: {
+    alignSelf: "flex-start",
     flexDirection: "row",
     alignItems: "center",
+    gap: 5,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 4,
+    borderRadius: borderRadius.full,
+    borderWidth: 1,
+    marginBottom: spacing.sm,
+  },
+  typeBadgeText: {
+    fontFamily: typography.fontFamily.bodySemibold,
+    fontSize: typography.fontSize.xs,
+    letterSpacing: 0.3,
+  },
+  modalTitle: {
+    fontFamily: typography.fontFamily.heading,
+    fontSize: typography.fontSize["3xl"],
+    color: colors.text.primary,
+    lineHeight: 38,
+    marginBottom: spacing.base,
+  },
+  modalMeta: {
+    gap: spacing.md,
+    marginBottom: spacing.base,
+    padding: spacing.base,
+    backgroundColor: "rgba(217,167,86,0.06)",
+    borderRadius: borderRadius.lg,
+    borderWidth: 1,
+    borderColor: colors.border.light,
+  },
+  modalMetaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+  },
+  metaIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: borderRadius.md,
+    backgroundColor: "rgba(217,167,86,0.15)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  metaLabel: {
+    fontFamily: typography.fontFamily.bodyMedium,
+    fontSize: typography.fontSize.xs,
+    color: colors.text.muted,
+    letterSpacing: 0.3,
+  },
+  metaValue: {
+    fontFamily: typography.fontFamily.bodySemibold,
+    fontSize: typography.fontSize.base,
+    color: colors.text.primary,
+  },
+  modalDesc: {
+    fontFamily: typography.fontFamily.body,
+    fontSize: typography.fontSize.base,
+    color: colors.text.muted,
+    lineHeight: 24,
+    marginBottom: spacing.base,
+  },
+  modalActions: {
+    flexDirection: "row",
     gap: spacing.sm,
+    marginBottom: spacing.sm,
+  },
+  ticketBtn: {
+    flex: 1,
+    borderRadius: borderRadius.full,
+    overflow: "hidden",
+    ...shadows.gold,
+  },
+  ticketBtnGradient: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: spacing.md,
+  },
+  ticketBtnText: {
+    fontFamily: typography.fontFamily.bodySemibold,
+    fontSize: typography.fontSize.base,
+    color: "#1A0D0A",
+  },
+  inquireBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
     paddingHorizontal: spacing.xl,
     paddingVertical: spacing.md,
     borderRadius: borderRadius.full,
+    borderWidth: 1.5,
+    borderColor: colors.border.gold,
   },
-  hostCTAButtonText: {
-    fontFamily: typography.fontFamily.bodyBold,
-    fontSize: typography.fontSize.sm,
-    color: colors.background.paper,
-    textTransform: "uppercase",
-    letterSpacing: 0.7,
+  inquireBtnText: {
+    fontFamily: typography.fontFamily.bodySemibold,
+    fontSize: typography.fontSize.base,
+    color: colors.primary.main,
+  },
+  modalCloseBtn: {
+    margin: spacing.base,
+    paddingVertical: spacing.md,
+    borderRadius: borderRadius.full,
+    backgroundColor: colors.primary.main,
+    alignItems: "center",
+  },
+  modalCloseBtnText: {
+    fontFamily: typography.fontFamily.bodySemibold,
+    fontSize: typography.fontSize.base,
+    color: "#FFFDFB",
   },
 });

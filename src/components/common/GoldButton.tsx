@@ -153,10 +153,11 @@ export function GoldButton({
 
 const styles = StyleSheet.create({
   base: {
-    borderRadius: borderRadius.base,
+    borderRadius: borderRadius.md,
     justifyContent: "center",
     alignItems: "center",
     flexDirection: "row",
+    minHeight: 44,
     ...shadows.sm,
   },
   filled: {
@@ -178,10 +179,12 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
     shadowOpacity: 0,
     elevation: 0,
+    minHeight: 44,
   },
   small: {
     paddingHorizontal: spacing.base,
     paddingVertical: spacing.sm,
+    minHeight: 36,
   },
   disabled: {
     opacity: 0.5,

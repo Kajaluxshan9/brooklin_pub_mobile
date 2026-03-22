@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   Animated,
 } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import { colors, typography, spacing, borderRadius } from "../../config/theme";
 import { useHaptics } from "../../hooks/useHaptics";
 
@@ -76,7 +77,7 @@ export function ErrorView({
       accessibilityLiveRegion="polite"
     >
       <View style={styles.iconContainer} accessibilityLabel="Error icon">
-        <Text style={styles.icon}>!</Text>
+        <Ionicons name="alert-circle" size={28} color="#fff" />
       </View>
       <Text style={styles.title} accessibilityRole="header">
         Oops!
@@ -108,18 +109,13 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background.default,
   },
   iconContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     backgroundColor: colors.error,
     justifyContent: "center",
     alignItems: "center",
     marginBottom: spacing.base,
-  },
-  icon: {
-    color: "#fff",
-    fontSize: 24,
-    fontWeight: "700",
   },
   title: {
     fontFamily: typography.fontFamily.heading,

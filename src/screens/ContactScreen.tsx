@@ -1,4 +1,4 @@
-﻿import React, { useState, useCallback, useRef, useEffect } from "react";
+import React, { useState, useCallback, useRef } from "react";
 import {
   View,
   Text,
@@ -9,307 +9,81 @@ import {
   Alert,
   ActivityIndicator,
   Linking,
-  Dimensions,
   Modal,
-  FlatList,
   KeyboardAvoidingView,
   Platform,
-  Animated,
   RefreshControl,
+  Pressable,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import * as DocumentPicker from "expo-document-picker";
-
-import PageHeader from "../components/common/PageHeader";
-import SocialFAB from "../components/common/SocialFAB";
-import {
-  GoldDivider,
-  CornerAccents,
-} from "../components/common";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useApiWithCache } from "../hooks/useApi";
 import { openingHoursService } from "../services/opening-hours.service";
-import {
-  contactService,
-  type ContactFormData,
-} from "../services/contact.service";
+import { contactService, type ContactFormData } from "../services/contact.service";
 import type { OpeningHours } from "../types/api.types";
 import {
   CONTACT_INFO,
   EXTERNAL_URLS,
   SUBJECT_OPTIONS,
 } from "../config/constants";
-import {
-  colors,
-  typography,
-  spacing,
-  borderRadius,
-  shadows,
-} from "../config/theme";
+import { colors, typography, spacing, borderRadius, shadows } from "../config/theme";
+import SocialFAB from "../components/common/SocialFAB";
 
-const { width: SCREEN_WIDTH } = Dimensions.get("window");
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
-// ======================================================================
-// HELPERS
-// ======================================================================
-
-const formatTimeTo12Hour = (time: string): string => {
-  const match = time.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
-  if (!match) return time;
-  let hour = parseInt(match[1], 10);
-  const minutes = match[2];
-  const period = hour >= 12 ? "P.M." : "A.M.";
-  if (hour === 0) hour = 12;
-  else if (hour > 12) hour = hour - 12;
-  return minutes === "00"
-    ? `${hour} ${period}`
-    : `${hour}:${minutes} ${period}`;
+const fmt12 = (time: string): string => {
+  const m = time.match(/^(\d{1,2}):(\d{2})/);
+  if (!m) return time;
+  let h = parseInt(m[1], 10);
+  const min = m[2];
+  const period = h >= 12 ? "PM" : "AM";
+  if (h === 0) h = 12;
+  else if (h > 12) h -= 12;
+  return min === "00" ? `${h} ${period}` : `${h}:${min} ${period}`;
 };
 
-const formatOpeningHours = (hours: OpeningHours[] | null) => {
+const buildHoursDisplay = (hours: OpeningHours[] | null): { days: string; time: string }[] => {
   if (!hours || hours.length === 0) {
     return [
-      { days: "SUN - THU", time: "11 A.M. - 11 P.M." },
-      { days: "FRI - SAT", time: "11 A.M. - 2 A.M." },
+      { days: "Sun – Thu", time: "11 AM – 11 PM" },
+      { days: "Fri – Sat", time: "11 AM – 2 AM" },
     ];
   }
-  const dayAbbrev: Record<string, string> = {
-    monday: "MON",
-    tuesday: "TUE",
-    wednesday: "WED",
-    thursday: "THU",
-    friday: "FRI",
-    saturday: "SAT",
-    sunday: "SUN",
+  const order = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+  const abbr: Record<string, string> = {
+    monday: "Mon", tuesday: "Tue", wednesday: "Wed", thursday: "Thu",
+    friday: "Fri", saturday: "Sat", sunday: "Sun",
   };
-  const dayOrder = [
-    "sunday",
-    "monday",
-    "tuesday",
-    "wednesday",
-    "thursday",
-    "friday",
-    "saturday",
-  ];
-
-  const timeGroups: Record<string, string[]> = {};
+  const groups: Record<string, string[]> = {};
   hours.forEach((h) => {
-    const isClosed = !h.isOpen || !h.isActive || !h.openTime || !h.closeTime;
-    const timeKey = isClosed ? "Closed" : `${h.openTime} - ${h.closeTime}`;
-    const day = dayAbbrev[h.dayOfWeek.toLowerCase()] || h.dayOfWeek;
-    if (!timeGroups[timeKey]) timeGroups[timeKey] = [];
-    timeGroups[timeKey].push(day);
+    const closed = !h.isOpen || !h.isActive || !h.openTime || !h.closeTime;
+    const key = closed ? "Closed" : `${h.openTime} - ${h.closeTime}`;
+    const day = abbr[h.dayOfWeek?.toLowerCase()] || h.dayOfWeek;
+    if (!groups[key]) groups[key] = [];
+    groups[key].push(day);
   });
-
-  const result: { days: string; time: string }[] = [];
-  Object.entries(timeGroups).forEach(([time, days]) => {
+  return Object.entries(groups).map(([time, days]) => {
     days.sort((a, b) => {
-      const aIdx = dayOrder.findIndex((d) => dayAbbrev[d] === a);
-      const bIdx = dayOrder.findIndex((d) => dayAbbrev[d] === b);
-      return aIdx - bIdx;
+      const ai = order.findIndex((d) => abbr[d] === a);
+      const bi = order.findIndex((d) => abbr[d] === b);
+      return ai - bi;
     });
-    let daysStr = "";
-    if (days.length === 1) daysStr = days[0];
-    else if (days.length === 7) daysStr = "EVERYDAY";
-    else {
-      const indices = days.map((d) => {
-        const key = Object.keys(dayAbbrev).find((k) => dayAbbrev[k] === d);
-        return dayOrder.indexOf(key || "");
-      });
-      const isConsecutive = indices.every(
-        (val, i, arr) => i === 0 || val === arr[i - 1] + 1,
-      );
-      daysStr =
-        isConsecutive && days.length >= 2
-          ? `${days[0]} - ${days[days.length - 1]}`
-          : days.join(" - ");
-    }
-    let formattedTime = time;
-    if (time !== "Closed") {
-      const parts = time.split(" - ");
-      if (parts.length === 2) {
-        formattedTime = `${formatTimeTo12Hour(parts[0].trim())} - ${formatTimeTo12Hour(parts[1].trim())}`;
-      }
-    }
-    result.push({ days: daysStr, time: formattedTime });
+    const daysStr =
+      days.length === 7 ? "Every Day"
+      : days.length >= 2 ? `${days[0]} – ${days[days.length - 1]}`
+      : days[0];
+    const timeStr = time === "Closed" ? "Closed"
+      : (() => { const [a, b] = time.split(" - "); return `${fmt12(a.trim())} – ${fmt12(b.trim())}`; })();
+    return { days: daysStr, time: timeStr };
   });
-  return result;
 };
 
-// ======================================================================
-// CONTACT INFO CARD
-// ======================================================================
+// ─── Form Field ───────────────────────────────────────────────────────────────
 
-interface ContactInfoCardProps {
-  icon: keyof typeof Ionicons.glyphMap;
-  title: string;
-  children: React.ReactNode;
-  delay?: number;
-}
-
-const ContactInfoCard = ({
-  icon,
-  title,
-  children,
-  delay = 0,
-}: ContactInfoCardProps) => {
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(20)).current;
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      Animated.parallel([
-        Animated.timing(fadeAnim, {
-          toValue: 1,
-          duration: 500,
-          useNativeDriver: true,
-        }),
-        Animated.timing(slideAnim, {
-          toValue: 0,
-          duration: 500,
-          useNativeDriver: true,
-        }),
-      ]).start();
-    }, delay);
-    return () => clearTimeout(timer);
-  }, []);
-
-  return (
-    <Animated.View
-      style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}
-    >
-      <View style={cardStyles.container}>
-        <LinearGradient
-          colors={[colors.secondary.main, "#B08030", colors.secondary.main]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 0 }}
-          style={cardStyles.topBar}
-        />
-        <View style={cardStyles.inner}>
-          <LinearGradient
-            colors={[colors.secondary.main, "#B08030"]}
-            style={cardStyles.iconBox}
-          >
-            <Ionicons name={icon} size={22} color="#fff" />
-          </LinearGradient>
-          <View style={cardStyles.content}>
-            <Text style={cardStyles.title}>{title}</Text>
-            {children}
-          </View>
-        </View>
-      </View>
-    </Animated.View>
-  );
-};
-
-const cardStyles = StyleSheet.create({
-  container: {
-    borderRadius: borderRadius.xl,
-    backgroundColor: colors.background.card,
-    borderWidth: 1,
-    borderColor: colors.border.light,
-    overflow: "hidden",
-    ...shadows.card,
-  },
-  topBar: { height: 3, width: "100%", opacity: 0.7 },
-  inner: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    padding: spacing.base,
-    gap: spacing.md,
-  },
-  iconBox: {
-    width: 44,
-    height: 44,
-    borderRadius: borderRadius.md,
-    alignItems: "center",
-    justifyContent: "center",
-    ...shadows.gold,
-  },
-  content: { flex: 1 },
-  title: {
-    fontFamily: typography.fontFamily.heading,
-    fontSize: typography.fontSize.xl,
-    color: colors.text.primary,
-    marginBottom: spacing.xs,
-  },
-});
-
-// ======================================================================
-// CONTACT ROW (phone / email)
-// ======================================================================
-
-interface ContactRowProps {
-  icon: keyof typeof Ionicons.glyphMap;
-  text: string;
-  subText?: string;
-  onPress: () => void;
-}
-
-const ContactRow = ({ icon, text, subText, onPress }: ContactRowProps) => (
-  <TouchableOpacity
-    style={rowStyles.container}
-    onPress={onPress}
-    activeOpacity={0.7}
-  >
-    <View style={rowStyles.iconBox}>
-      <Ionicons name={icon} size={18} color={colors.secondary.main} />
-    </View>
-    <View style={rowStyles.textWrap}>
-      <Text style={rowStyles.text}>{text}</Text>
-      {subText && <Text style={rowStyles.subText}>{subText}</Text>}
-    </View>
-  </TouchableOpacity>
-);
-
-const rowStyles = StyleSheet.create({
-  container: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.md,
-    paddingVertical: spacing.xs + 2,
-  },
-  iconBox: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    backgroundColor: colors.glass.gold,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  textWrap: { flex: 1 },
-  text: {
-    fontSize: typography.fontSize.base,
-    fontWeight: typography.fontWeight.semibold,
-    color: "#4A2C17",
-  },
-  subText: {
-    fontSize: typography.fontSize.xs,
-    color: colors.text.muted,
-    fontStyle: "italic",
-    marginTop: 2,
-  },
-});
-
-// ======================================================================
-// STYLED TEXT INPUT
-// ======================================================================
-
-interface StyledInputProps {
-  label: string;
-  value: string;
-  onChangeText: (text: string) => void;
-  placeholder?: string;
-  error?: string;
-  keyboardType?: TextInput["props"]["keyboardType"];
-  multiline?: boolean;
-  numberOfLines?: number;
-  required?: boolean;
-  icon?: keyof typeof Ionicons.glyphMap;
-}
-
-const StyledInput = ({
+const Field = ({
   label,
   value,
   onChangeText,
@@ -317,29 +91,27 @@ const StyledInput = ({
   error,
   keyboardType,
   multiline,
-  numberOfLines,
+  lines = 4,
   required,
   icon,
-}: StyledInputProps) => (
-  <View style={inputStyles.wrapper}>
-    <Text style={inputStyles.label}>
-      {label}
-      {required && <Text style={{ color: colors.secondary.main }}> *</Text>}
+}: {
+  label: string;
+  value: string;
+  onChangeText: (t: string) => void;
+  placeholder?: string;
+  error?: string;
+  keyboardType?: TextInput["props"]["keyboardType"];
+  multiline?: boolean;
+  lines?: number;
+  required?: boolean;
+  icon?: keyof typeof Ionicons.glyphMap;
+}) => (
+  <View style={styles.fieldWrap}>
+    <Text style={styles.fieldLabel}>
+      {label}{required && <Text style={styles.required}> *</Text>}
     </Text>
-    <View
-      style={[
-        inputStyles.inputContainer,
-        error ? inputStyles.inputError : null,
-      ]}
-    >
-      {icon && (
-        <Ionicons
-          name={icon}
-          size={18}
-          color={colors.secondary.main}
-          style={{ marginRight: spacing.sm }}
-        />
-      )}
+    <View style={[styles.fieldInput, error ? styles.fieldInputError : null, multiline && styles.fieldInputMulti]}>
+      {icon && <Ionicons name={icon} size={16} color={error ? colors.error : colors.text.muted} style={styles.fieldIcon} />}
       <TextInput
         value={value}
         onChangeText={onChangeText}
@@ -347,1218 +119,709 @@ const StyledInput = ({
         placeholderTextColor={colors.text.muted}
         keyboardType={keyboardType}
         multiline={multiline}
-        numberOfLines={numberOfLines}
-        style={[
-          inputStyles.input,
-          multiline && {
-            minHeight: (numberOfLines || 4) * 22,
-            textAlignVertical: "top",
-          },
-        ]}
+        numberOfLines={lines}
+        style={[styles.fieldTextInput, multiline && { minHeight: lines * 22, textAlignVertical: "top" }]}
       />
     </View>
-    {error && <Text style={inputStyles.error}>{error}</Text>}
+    {error ? <Text style={styles.fieldError}>{error}</Text> : null}
   </View>
 );
 
-const inputStyles = StyleSheet.create({
-  wrapper: { marginBottom: spacing.base },
-  label: {
-    fontSize: typography.fontSize.sm,
-    fontWeight: typography.fontWeight.medium,
-    color: colors.primary.main,
-    marginBottom: spacing.xs,
-  },
-  inputContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "rgba(255,255,255,0.95)",
-    borderRadius: borderRadius.lg,
-    borderWidth: 1,
-    borderColor: colors.border.gold,
-    paddingHorizontal: spacing.base,
-    paddingVertical: Platform.OS === "ios" ? spacing.md : spacing.sm,
-    minHeight: 56,
-  },
-  inputError: { borderColor: colors.error, borderWidth: 1.5 },
-  input: {
-    flex: 1,
-    fontSize: typography.fontSize.base,
-    color: colors.text.primary,
-    padding: 0,
-  },
-  error: {
-    fontSize: typography.fontSize.xs,
-    color: colors.error,
-    marginTop: spacing.xs,
-    marginLeft: spacing.xs,
-  },
-});
-
-// ======================================================================
-// ANIMATED SUCCESS MESSAGE
-// ======================================================================
-
-const SuccessMessage = ({
-  isReservation,
-  isCareers,
-  email,
-}: {
-  isReservation: boolean;
-  isCareers: boolean;
-  email: string;
-}) => {
-  const scaleAnim = useRef(new Animated.Value(0.8)).current;
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  const circleScale = useRef(new Animated.Value(0)).current;
-  const circleRotate = useRef(new Animated.Value(-180)).current;
-  const textSlide = useRef(new Animated.Value(20)).current;
-  const textFade = useRef(new Animated.Value(0)).current;
-  const boxSlide = useRef(new Animated.Value(20)).current;
-  const boxFade = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    Animated.sequence([
-      Animated.parallel([
-        Animated.spring(scaleAnim, { toValue: 1, tension: 200, friction: 15, useNativeDriver: true }),
-        Animated.timing(fadeAnim, { toValue: 1, duration: 600, useNativeDriver: true }),
-      ]),
-      Animated.parallel([
-        Animated.spring(circleScale, { toValue: 1, tension: 200, friction: 12, useNativeDriver: true }),
-        Animated.timing(circleRotate, { toValue: 0, duration: 500, useNativeDriver: true }),
-      ]),
-      Animated.parallel([
-        Animated.timing(textFade, { toValue: 1, duration: 400, useNativeDriver: true }),
-        Animated.timing(textSlide, { toValue: 0, duration: 400, useNativeDriver: true }),
-      ]),
-      Animated.parallel([
-        Animated.timing(boxFade, { toValue: 1, duration: 400, useNativeDriver: true }),
-        Animated.timing(boxSlide, { toValue: 0, duration: 400, useNativeDriver: true }),
-      ]),
-    ]).start();
-  }, []);
-
-  const rotateInterp = circleRotate.interpolate({
-    inputRange: [-180, 0],
-    outputRange: ["-180deg", "0deg"],
-  });
-
-  return (
-    <Animated.View
-      style={[
-        styles.successContainer,
-        { opacity: fadeAnim, transform: [{ scale: scaleAnim }] },
-      ]}
-    >
-      <Animated.View
-        style={[
-          styles.successCircle,
-          { transform: [{ scale: circleScale }, { rotate: rotateInterp }] },
-        ]}
-      >
-        <Ionicons name="checkmark-circle" size={64} color="#fff" />
-      </Animated.View>
-      <Animated.View style={{ opacity: textFade, transform: [{ translateY: textSlide }] }}>
-        <Text style={styles.successTitle}>
-          {isReservation
-            ? "Reservation Request Sent!"
-            : isCareers
-              ? "Application Submitted!"
-              : "Message Sent!"}
-        </Text>
-      </Animated.View>
-      <Animated.View style={{ opacity: textFade, transform: [{ translateY: textSlide }] }}>
-        <Text style={styles.successDesc}>
-          {isReservation
-            ? "Thank you! We'll confirm your party reservation shortly via email."
-            : isCareers
-              ? "Thank you for your interest! Our team will review your application and get back to you soon."
-              : "Thank you for reaching out! We'll get back to you within 24 hours."}
-        </Text>
-      </Animated.View>
-      <Animated.View style={[styles.confirmBox, { opacity: boxFade, transform: [{ translateY: boxSlide }] }]}>
-        <Ionicons name="mail" size={24} color={colors.secondary.main} />
-        <View style={{ marginLeft: spacing.md }}>
-          <Text style={styles.confirmLabel}>Confirmation sent to</Text>
-          <Text style={styles.confirmEmail}>{email}</Text>
-        </View>
-      </Animated.View>
-    </Animated.View>
-  );
-};
-
-// ======================================================================
-// ANIMATED FORM WRAPPER
-// ======================================================================
-
-const AnimatedFormWrapper = ({ children }: { children: React.ReactNode }) => {
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(30)).current;
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      Animated.parallel([
-        Animated.timing(fadeAnim, { toValue: 1, duration: 800, useNativeDriver: true }),
-        Animated.timing(slideAnim, { toValue: 0, duration: 800, useNativeDriver: true }),
-      ]).start();
-    }, 400);
-    return () => clearTimeout(timer);
-  }, []);
-
-  return (
-    <Animated.View
-      style={[
-        styles.formWrapper,
-        { opacity: fadeAnim, transform: [{ translateY: slideAnim }] },
-      ]}
-    >
-      {children}
-    </Animated.View>
-  );
-};
-
-// ======================================================================
-// MAIN COMPONENT
-// ======================================================================
+// ─── Main Screen ──────────────────────────────────────────────────────────────
 
 export default function ContactScreen() {
+  const insets = useSafeAreaInsets();
   const scrollRef = useRef<ScrollView>(null);
 
   const [formData, setFormData] = useState<ContactFormData>({
-    name: "",
-    email: "",
-    phone: "",
-    subject: "",
-    reservationDate: "",
-    reservationTime: "",
-    guestCount: undefined,
-    position: "",
-    message: "",
+    name: "", email: "", phone: "", subject: "",
+    reservationDate: "", reservationTime: "",
+    guestCount: undefined, position: "", message: "",
   });
-  const [cvFile, setCvFile] = useState<{
-    name: string;
-    uri: string;
-    size: number;
-    mimeType: string;
-  } | null>(null);
+  const [cvFile, setCvFile] = useState<{ name: string; uri: string; size: number; mimeType: string } | null>(null);
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [showSubjectPicker, setShowSubjectPicker] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   const isReservation = formData.subject === "reservation";
   const isCareers = formData.subject === "careers";
 
-  const [refreshing, setRefreshing] = useState(false);
-
-  // Fetch opening hours
   const { data: openingHoursData, refetch: hoursRefetch } = useApiWithCache<OpeningHours[]>(
-    "opening-hours",
-    () => openingHoursService.getAllOpeningHours(),
+    "opening-hours", () => openingHoursService.getAllOpeningHours(),
   );
-  const { data: openStatus, refetch: statusRefetch } = useApiWithCache("opening-hours-status", () =>
-    openingHoursService.getCurrentStatus(),
-  );
-  const displayHours = formatOpeningHours(openingHoursData);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await Promise.allSettled([hoursRefetch(), statusRefetch()]);
+    await hoursRefetch();
     setRefreshing(false);
-  }, [hoursRefetch, statusRefetch]);
+  }, [hoursRefetch]);
 
-  // -- Handlers --
+  const displayHours = buildHoursDisplay(openingHoursData ?? null);
 
-  const updateField = useCallback(
+  const setField = useCallback(
     (field: keyof ContactFormData, value: string | number | undefined) => {
-      setFormData((prev) => ({ ...prev, [field]: value }));
-      if (errors[field]) setErrors((prev) => ({ ...prev, [field]: "" }));
+      setFormData((p) => ({ ...p, [field]: value }));
+      if (errors[field]) setErrors((p) => ({ ...p, [field]: "" }));
     },
     [errors],
   );
 
   const pickDocument = useCallback(async () => {
     try {
-      const result = await DocumentPicker.getDocumentAsync({
-        type: [
-          "application/pdf",
-          "application/msword",
-          "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        ],
+      const res = await DocumentPicker.getDocumentAsync({
+        type: ["application/pdf", "application/msword",
+          "application/vnd.openxmlformats-officedocument.wordprocessingml.document"],
         copyToCacheDirectory: true,
       });
-      if (!result.canceled && result.assets && result.assets.length > 0) {
-        const file = result.assets[0];
-        setCvFile({
-          name: file.name,
-          uri: file.uri,
-          size: file.size || 0,
-          mimeType: file.mimeType || "",
-        });
-        if (errors.cvFile) setErrors((prev) => ({ ...prev, cvFile: "" }));
+      if (!res.canceled && res.assets?.[0]) {
+        const f = res.assets[0];
+        setCvFile({ name: f.name, uri: f.uri, size: f.size ?? 0, mimeType: f.mimeType ?? "" });
       }
     } catch {
       Alert.alert("Error", "Failed to pick document");
     }
-  }, [errors]);
+  }, []);
 
   const validate = useCallback(() => {
-    const newErrors: Record<string, string> = {};
-    if (!formData.name || formData.name.trim().length < 2)
-      newErrors.name = "Please enter your full name";
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!formData.email || !emailRegex.test(formData.email))
-      newErrors.email = "Please enter a valid email address";
-    if (!formData.subject) newErrors.subject = "Please select a subject";
+    const e: Record<string, string> = {};
+    if (!formData.name?.trim() || formData.name.trim().length < 2) e.name = "Enter your full name";
+    if (!formData.email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) e.email = "Enter a valid email";
+    if (!formData.subject) e.subject = "Select a subject";
     if (isReservation) {
-      if (!formData.reservationDate)
-        newErrors.reservationDate = "Please enter a date";
-      if (!formData.reservationTime)
-        newErrors.reservationTime = "Please enter a time";
-      if (formData.guestCount !== undefined && formData.guestCount < 1)
-        newErrors.guestCount = "Number of guests must be at least 1";
+      if (!formData.reservationDate) e.reservationDate = "Enter a date";
+      if (!formData.reservationTime) e.reservationTime = "Enter a time";
     }
-    if (isCareers && cvFile) {
-      if (cvFile.size > 5 * 1024 * 1024)
-        newErrors.cvFile = "File size must be less than 5MB";
-    }
-    if (!formData.message || formData.message.trim().length < 10)
-      newErrors.message = "Message should be at least 10 characters";
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  }, [formData, isReservation, isCareers, cvFile]);
+    if (cvFile && cvFile.size > 5 * 1024 * 1024) e.cvFile = "File must be under 5 MB";
+    if (!formData.message?.trim() || formData.message.trim().length < 10) e.message = "Message must be at least 10 characters";
+    setErrors(e);
+    return Object.keys(e).length === 0;
+  }, [formData, isReservation, cvFile]);
 
   const handleSubmit = useCallback(async () => {
     if (!validate()) return;
     setLoading(true);
     try {
-      let fullMessage = formData.message;
+      let msg = formData.message;
       if (isReservation) {
-        fullMessage = `PARTY RESERVATION REQUEST\n\nDate: ${formData.reservationDate}\nTime: ${formData.reservationTime}\nNumber of Guests: ${formData.guestCount}\n\nAdditional Notes:\n${formData.message}`;
+        msg = `PARTY RESERVATION\n\nDate: ${formData.reservationDate}\nTime: ${formData.reservationTime}\nGuests: ${formData.guestCount}\n\n${formData.message}`;
+      } else if (isCareers) {
+        msg = `CAREERS APPLICATION\n\n${formData.message}${cvFile ? `\n\n[CV: ${cvFile.name}]` : ""}`;
       }
-      if (isCareers) {
-        fullMessage = `CAREERS APPLICATION\n\nCover Letter / Message:\n${formData.message}${cvFile ? `\n\n[CV Attached: ${cvFile.name}]` : ""}`;
-      }
-      const response = await contactService.submitContactForm({
-        ...formData,
-        message: fullMessage,
-        ...(isCareers && cvFile
-          ? {
-              cvFile: {
-                uri: cvFile.uri,
-                name: cvFile.name,
-                type: cvFile.mimeType || "application/pdf",
-              },
-            }
-          : {}),
+      const res = await contactService.submitContactForm({
+        ...formData, message: msg,
+        ...(isCareers && cvFile ? { cvFile: { uri: cvFile.uri, name: cvFile.name, type: cvFile.mimeType || "application/pdf" } } : {}),
       });
-      if (response.success) {
+      if (res.success) {
         setSubmitted(true);
         setTimeout(() => {
-          setFormData({
-            name: "",
-            email: "",
-            phone: "",
-            subject: "",
-            reservationDate: "",
-            reservationTime: "",
-            guestCount: undefined,
-            position: "",
-            message: "",
-          });
+          setFormData({ name: "", email: "", phone: "", subject: "", reservationDate: "", reservationTime: "", guestCount: undefined, position: "", message: "" });
           setCvFile(null);
           setSubmitted(false);
         }, 5000);
       }
     } catch {
-      const subjectLine = isReservation
-        ? `Party Reservation - ${formData.reservationDate}`
-        : isCareers
-          ? "Careers Application"
-          : SUBJECT_OPTIONS.find((o) => o.value === formData.subject)?.label ||
-            "Contact from app";
-      const body = `Name: ${formData.name}\nEmail: ${formData.email}\nPhone: ${formData.phone || "N/A"}\n\n${formData.message}`;
-      Linking.openURL(
-        `mailto:brooklinpub@gmail.com?subject=${encodeURIComponent(subjectLine)}&body=${encodeURIComponent(body)}`,
-      ).catch(() => {});
-      Alert.alert("Info", "Opening email client as backup...");
+      const subj = isReservation ? `Party Reservation - ${formData.reservationDate}`
+        : isCareers ? "Careers Application"
+        : SUBJECT_OPTIONS.find((o) => o.value === formData.subject)?.label ?? "Contact from app";
+      const body = `Name: ${formData.name}\nEmail: ${formData.email}\n\n${formData.message}`;
+      Linking.openURL(`mailto:${CONTACT_INFO.EMAIL_GENERAL}?subject=${encodeURIComponent(subj)}&body=${encodeURIComponent(body)}`).catch(() => {});
     } finally {
       setLoading(false);
     }
   }, [formData, isReservation, isCareers, cvFile, validate]);
 
-  const selectedSubjectLabel =
-    SUBJECT_OPTIONS.find((o) => o.value === formData.subject)?.label || "";
-
-  // ======================================================================
-  // RENDER
-  // ======================================================================
+  const selectedSubjectLabel = SUBJECT_OPTIONS.find((o) => o.value === formData.subject)?.label ?? "";
 
   return (
     <KeyboardAvoidingView
       style={{ flex: 1 }}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
     >
       <ScrollView
         ref={scrollRef}
-        style={styles.container}
-        contentContainerStyle={styles.contentContainer}
+        style={[styles.root, { paddingTop: insets.top }]}
+        contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
-        bounces={true}
         refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            tintColor={colors.secondary.main}
-            colors={[colors.secondary.main]}
-          />
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh}
+            tintColor={colors.secondary.main} colors={[colors.secondary.main]} />
         }
       >
-        {/* === PAGE HEADER === */}
-        <PageHeader
-          title="Contact Us"
-          subtitle="Reservations, private events, or just saying hello"
-          icon="mail-outline"
-        />
-
-        {/* === CONTACT INFO CARDS === */}
-        <View style={styles.cardsContainer}>
-          {/* Visit Us */}
-          <ContactInfoCard icon="location-outline" title="Visit Us" delay={100}>
-            <Text style={styles.addressText}>
-              <Text style={styles.addressBold}>15 Baldwin Street</Text>
-              {"\n"}Whitby, ON L1M 1A2{"\n"}Canada
-            </Text>
-            <TouchableOpacity
-              style={styles.directionsBtn}
-              onPress={() =>
-                Linking.openURL(
-                  "https://maps.google.com/?q=15+Baldwin+Street+Whitby+ON",
-                ).catch(() => {})
-              }
-            >
-              <Text style={styles.directionsText}>Get Directions</Text>
-              <Ionicons
-                name="arrow-forward"
-                size={14}
-                color={colors.secondary.main}
-              />
-            </TouchableOpacity>
-          </ContactInfoCard>
-
-          {/* Get in Touch */}
-          <ContactInfoCard icon="call-outline" title="Get in Touch" delay={200}>
-            <ContactRow
-              icon="call-outline"
-              text={CONTACT_INFO.PHONE}
-              onPress={() =>
-                Linking.openURL(`tel:${CONTACT_INFO.PHONE_RAW}`).catch(() => {})
-              }
-            />
-            <ContactRow
-              icon="mail-outline"
-              text={CONTACT_INFO.EMAIL_GENERAL}
-              subText="General Inquiries"
-              onPress={() =>
-                Linking.openURL(`mailto:${CONTACT_INFO.EMAIL_GENERAL}`).catch(
-                  () => {},
-                )
-              }
-            />
-            <ContactRow
-              icon="calendar-outline"
-              text={CONTACT_INFO.EMAIL_EVENTS}
-              subText="Parties & Events"
-              onPress={() =>
-                Linking.openURL(`mailto:${CONTACT_INFO.EMAIL_EVENTS}`).catch(
-                  () => {},
-                )
-              }
-            />
-          </ContactInfoCard>
-
-          {/* Opening Hours */}
-          <ContactInfoCard
-            icon="time-outline"
-            title="Opening Hours"
-            delay={300}
-          >
-            <View style={styles.hoursContainer}>
-              {displayHours.map((h, idx) => (
-                <View
-                  key={idx}
-                  style={[
-                    styles.hoursRow,
-                    idx < displayHours.length - 1 && styles.hoursRowBorder,
-                  ]}
-                >
-                  <Text style={styles.hoursDays}>{h.days}</Text>
-                  <Text
-                    style={[
-                      styles.hoursTime,
-                      h.time === "Closed" && {
-                        color: "#c44",
-                        fontWeight: "600" as const,
-                      },
-                    ]}
-                  >
-                    {h.time}
-                  </Text>
-                </View>
-              ))}
-            </View>
-          </ContactInfoCard>
+        {/* ── Header ── */}
+        <View style={styles.header}>
+          <Text style={styles.headerTitle}>Contact Us</Text>
+          <Text style={styles.headerSubtitle}>We'd love to hear from you</Text>
         </View>
 
-        {/* === CONTACT FORM === */}
-        <AnimatedFormWrapper>
-          <LinearGradient
-            colors={[colors.secondary.main, "#B08030", colors.secondary.main]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
-            style={styles.formTopBar}
-          />
+        {/* ── Quick Contact ── */}
+        <View style={styles.quickContactRow}>
+          <TouchableOpacity style={styles.quickContactBtn}
+            onPress={() => Linking.openURL(`tel:${CONTACT_INFO.PHONE_RAW}`)} activeOpacity={0.8}>
+            <View style={styles.quickContactIcon}>
+              <Ionicons name="call" size={20} color={colors.primary.main} />
+            </View>
+            <Text style={styles.quickContactText}>{CONTACT_INFO.PHONE}</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.quickContactBtn}
+            onPress={() => Linking.openURL(`mailto:${CONTACT_INFO.EMAIL_GENERAL}`)} activeOpacity={0.8}>
+            <View style={styles.quickContactIcon}>
+              <Ionicons name="mail" size={20} color={colors.primary.main} />
+            </View>
+            <Text style={styles.quickContactText}>{CONTACT_INFO.EMAIL_GENERAL}</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* ── Contact Form ── */}
+        <View style={styles.section}>
+          <Text style={styles.sectionOverline}>Get In Touch</Text>
+          <Text style={styles.sectionTitle}>Send a Message</Text>
+
           {submitted ? (
-            <SuccessMessage
-              isReservation={isReservation}
-              isCareers={isCareers}
-              email={formData.email}
-            />
+            <View style={styles.successCard}>
+              <LinearGradient colors={["rgba(34,197,94,0.12)", "rgba(34,197,94,0.06)"]} style={StyleSheet.absoluteFillObject} />
+              <View style={styles.successIconWrap}>
+                <Ionicons name="checkmark-circle" size={40} color="#22C55E" />
+              </View>
+              <Text style={styles.successTitle}>Message Sent!</Text>
+              <Text style={styles.successDesc}>
+                Thanks for reaching out. We'll get back to you within 24 hours.
+              </Text>
+            </View>
           ) : (
-            <View style={styles.formInner}>
-              {/* Form Header */}
-              <View style={styles.formHeader}>
-                <Text style={styles.formTitle}>Let's Talk</Text>
-                <Text style={styles.formSubtitle}>
-                  We'd love to hear from you! Whether you're planning a visit,
-                  looking to join our team, or just want to say hi — drop us a
-                  line.
-                </Text>
-                <View style={styles.responseBadge}>
-                  <View style={styles.pulseDot} />
-                  <Text style={styles.responseText}>
-                    We typically respond within 48 hours
-                  </Text>
-                </View>
-              </View>
+            <View style={styles.form}>
+              <Field label="Full Name" value={formData.name} onChangeText={(v) => setField("name", v)}
+                placeholder="Your name" error={errors.name} required icon="person-outline" />
+              <Field label="Email" value={formData.email} onChangeText={(v) => setField("email", v)}
+                placeholder="your@email.com" error={errors.email} required icon="mail-outline"
+                keyboardType="email-address" />
+              <Field label="Phone" value={formData.phone ?? ""} onChangeText={(v) => setField("phone", v)}
+                placeholder="(optional)" icon="call-outline" keyboardType="phone-pad" />
 
-              {/* Name */}
-              <StyledInput
-                label="Your Name"
-                value={formData.name}
-                onChangeText={(t) => updateField("name", t)}
-                placeholder="Enter your full name"
-                error={errors.name}
-                required
-              />
-
-              {/* Email & Phone */}
-              <StyledInput
-                label="Email Address"
-                value={formData.email}
-                onChangeText={(t) => updateField("email", t)}
-                placeholder="your@email.com"
-                keyboardType="email-address"
-                error={errors.email}
-                required
-              />
-              <StyledInput
-                label="Phone Number"
-                value={formData.phone || ""}
-                onChangeText={(t) => updateField("phone", t)}
-                placeholder="(optional)"
-                keyboardType="phone-pad"
-              />
-
-              {/* Subject Picker */}
-              <View style={inputStyles.wrapper}>
-                <Text style={inputStyles.label}>
-                  Subject
-                  <Text style={{ color: colors.secondary.main }}> *</Text>
-                </Text>
+              {/* Subject picker */}
+              <View style={styles.fieldWrap}>
+                <Text style={styles.fieldLabel}>Subject <Text style={styles.required}>*</Text></Text>
                 <TouchableOpacity
-                  style={[
-                    inputStyles.inputContainer,
-                    errors.subject ? inputStyles.inputError : null,
-                  ]}
-                  onPress={() => setShowSubjectPicker(true)}
-                  activeOpacity={0.7}
+                  style={[styles.fieldInput, errors.subject ? styles.fieldInputError : null]}
+                  onPress={() => setShowSubjectPicker(true)} activeOpacity={0.8}
                 >
-                  <Text
-                    style={[
-                      inputStyles.input,
-                      !selectedSubjectLabel && { color: colors.text.muted },
-                    ]}
-                  >
-                    {selectedSubjectLabel || "Select a subject"}
+                  <Ionicons name="list-outline" size={16} color={errors.subject ? colors.error : colors.text.muted} style={styles.fieldIcon} />
+                  <Text style={[styles.fieldTextInput, !selectedSubjectLabel && { color: colors.text.muted }]}>
+                    {selectedSubjectLabel || "Select a subject…"}
                   </Text>
-                  <Ionicons
-                    name="chevron-down"
-                    size={18}
-                    color={colors.secondary.main}
-                  />
+                  <Ionicons name="chevron-down" size={16} color={colors.text.muted} />
                 </TouchableOpacity>
-                {errors.subject && (
-                  <Text style={inputStyles.error}>{errors.subject}</Text>
-                )}
+                {errors.subject ? <Text style={styles.fieldError}>{errors.subject}</Text> : null}
               </View>
 
-              {/* Reservation Fields */}
+              {/* Conditional reservation fields */}
               {isReservation && (
-                <View style={styles.conditionalSection}>
-                  <View style={styles.conditionalHeader}>
-                    <View style={styles.conditionalIconBox}>
-                      <Ionicons
-                        name="calendar"
-                        size={20}
-                        color={colors.secondary.main}
-                      />
-                    </View>
-                    <Text style={styles.conditionalTitle}>
-                      Party Reservation Details
-                    </Text>
-                  </View>
-                  <StyledInput
-                    label="Date"
-                    value={formData.reservationDate || ""}
-                    onChangeText={(t) => updateField("reservationDate", t)}
-                    placeholder="e.g. 2026-03-15"
-                    error={errors.reservationDate}
-                    required
-                    icon="calendar-outline"
-                  />
-                  <StyledInput
-                    label="Time"
-                    value={formData.reservationTime || ""}
-                    onChangeText={(t) => updateField("reservationTime", t)}
-                    placeholder="e.g. 7:00 PM"
-                    error={errors.reservationTime}
-                    required
-                    icon="time-outline"
-                  />
-                  <StyledInput
-                    label="Number of Guests"
-                    value={formData.guestCount?.toString() || ""}
-                    onChangeText={(t) => {
-                      const num = parseInt(t, 10);
-                      updateField(
-                        "guestCount",
-                        t === "" ? undefined : isNaN(num) ? undefined : num,
-                      );
-                    }}
-                    placeholder="Enter number of guests"
-                    keyboardType="number-pad"
-                    error={errors.guestCount}
-                    icon="people-outline"
-                  />
-                </View>
+                <>
+                  <Field label="Date" value={formData.reservationDate ?? ""} onChangeText={(v) => setField("reservationDate", v)}
+                    placeholder="e.g. Saturday, March 29" error={errors.reservationDate} required icon="calendar-outline" />
+                  <Field label="Time" value={formData.reservationTime ?? ""} onChangeText={(v) => setField("reservationTime", v)}
+                    placeholder="e.g. 7:00 PM" error={errors.reservationTime} required icon="time-outline" />
+                  <Field label="Number of Guests" value={formData.guestCount?.toString() ?? ""}
+                    onChangeText={(v) => setField("guestCount", v ? parseInt(v, 10) : undefined)}
+                    placeholder="e.g. 8" icon="people-outline" keyboardType="number-pad" />
+                </>
               )}
 
-              {/* Careers Fields */}
+              {/* Conditional careers fields */}
               {isCareers && (
-                <View style={styles.conditionalSection}>
-                  <View style={styles.conditionalHeader}>
-                    <View style={styles.conditionalIconBox}>
-                      <Ionicons
-                        name="briefcase"
-                        size={20}
-                        color={colors.secondary.main}
-                      />
-                    </View>
-                    <Text style={styles.conditionalTitle}>Upload Your CV</Text>
+                <>
+                  <Field label="Position of Interest" value={formData.position ?? ""} onChangeText={(v) => setField("position", v)}
+                    placeholder="e.g. Server, Cook…" icon="briefcase-outline" />
+                  <View style={styles.fieldWrap}>
+                    <Text style={styles.fieldLabel}>Attach CV <Text style={styles.optional}>(optional)</Text></Text>
+                    <TouchableOpacity style={[styles.fieldInput, errors.cvFile ? styles.fieldInputError : null]}
+                      onPress={pickDocument} activeOpacity={0.8}>
+                      <Ionicons name={cvFile ? "document-attach" : "cloud-upload-outline"} size={16}
+                        color={errors.cvFile ? colors.error : colors.text.muted} style={styles.fieldIcon} />
+                      <Text style={[styles.fieldTextInput, !cvFile && { color: colors.text.muted }]}>
+                        {cvFile ? cvFile.name : "Upload PDF or Word doc…"}
+                      </Text>
+                      {cvFile && (
+                        <TouchableOpacity onPress={() => setCvFile(null)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+                          <Ionicons name="close-circle" size={16} color={colors.text.muted} />
+                        </TouchableOpacity>
+                      )}
+                    </TouchableOpacity>
+                    {errors.cvFile ? <Text style={styles.fieldError}>{errors.cvFile}</Text> : null}
                   </View>
-                  <TouchableOpacity
-                    style={styles.uploadBox}
-                    onPress={pickDocument}
-                    activeOpacity={0.7}
-                  >
-                    {cvFile ? (
-                      <View style={{ alignItems: "center" }}>
-                        <Text style={styles.uploadedFileName}>
-                          {" " + cvFile.name}
-                        </Text>
-                        <Text style={styles.uploadChangeText}>
-                          Tap to change file
-                        </Text>
-                      </View>
-                    ) : (
-                      <View style={{ alignItems: "center" }}>
-                        <Text
-                          style={{ fontSize: 32, marginBottom: spacing.sm }}
-                        >
-                          {""}
-                        </Text>
-                        <Text style={styles.uploadMainText}>
-                          Tap to upload your CV
-                        </Text>
-                        <Text style={styles.uploadSubText}>
-                          PDF, DOC, or DOCX (Max 5MB)
-                        </Text>
-                      </View>
-                    )}
-                  </TouchableOpacity>
-                  {errors.cvFile && (
-                    <Text style={inputStyles.error}>{errors.cvFile}</Text>
-                  )}
-                </View>
+                </>
               )}
 
-              {/* Message */}
-              <StyledInput
-                label={
-                  isReservation
-                    ? "Special Requests / Notes"
-                    : isCareers
-                      ? "Cover Letter / Why you want to join us"
-                      : "Your Message"
-                }
-                value={formData.message}
-                onChangeText={(t) => updateField("message", t)}
-                placeholder={
-                  isReservation
-                    ? "Any dietary restrictions, special occasions, seating preferences..."
-                    : isCareers
-                      ? "Tell us about yourself, your experience, and why you'd be a great fit..."
-                      : "Tell us how we can help you..."
-                }
-                multiline
-                numberOfLines={isReservation ? 3 : 5}
-                error={errors.message}
-                required
-              />
+              <Field label="Message" value={formData.message} onChangeText={(v) => setField("message", v)}
+                placeholder="Tell us how we can help…" error={errors.message} required
+                multiline lines={5} />
 
-              {/* Submit Button */}
-              <TouchableOpacity
-                style={[
-                  styles.submitButton,
-                  loading && styles.submitButtonDisabled,
-                ]}
-                onPress={handleSubmit}
-                disabled={loading}
-                activeOpacity={0.85}
-              >
+              <TouchableOpacity style={styles.submitBtn} onPress={handleSubmit} disabled={loading} activeOpacity={0.85}>
                 <LinearGradient
-                  colors={
-                    loading
-                      ? ["rgba(217,167,86,0.5)", "rgba(176,128,48,0.5)"]
-                      : [colors.secondary.main, "#B08030"]
-                  }
-                  style={styles.submitGradient}
+                  colors={[colors.primary.main, colors.primary.dark]}
+                  start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+                  style={styles.submitBtnGradient}
                 >
-                  {loading ? (
-                    <ActivityIndicator size="small" color="#fff" />
-                  ) : (
-                    <>
-                      <Ionicons
-                        name="send"
-                        size={20}
-                        color={colors.background.paper}
-                      />
-                      <Text style={styles.submitText}>
-                        {isReservation
-                          ? "Request Reservation"
-                          : isCareers
-                            ? "Submit Application"
-                            : "Send Message"}
-                      </Text>
-                    </>
-                  )}
+                  {loading
+                    ? <ActivityIndicator color="#FFFDFB" size="small" />
+                    : <>
+                        <Ionicons name="send" size={16} color="#FFFDFB" />
+                        <Text style={styles.submitBtnText}>Send Message</Text>
+                      </>
+                  }
                 </LinearGradient>
               </TouchableOpacity>
             </View>
           )}
-        </AnimatedFormWrapper>
-
-        {/* === MAP SECTION === */}
-        <View style={styles.mapSection}>
-          <Text style={styles.mapTitle}>Find Us</Text>
-          <TouchableOpacity
-            style={styles.mapCard}
-            onPress={() => Linking.openURL(EXTERNAL_URLS.GOOGLE_MAPS).catch(() => {})}
-            activeOpacity={0.85}
-          >
-            <LinearGradient
-              colors={["#3C1F0E", "#5A3018", "#3C1F0E"]}
-              style={styles.mapCardGradient}
-            >
-              <Ionicons name="map-outline" size={40} color="#D9A756" />
-              <View style={styles.mapCardInfo}>
-                <Text style={styles.mapCardTitle}>Brooklin Pub & Grill</Text>
-                <Text style={styles.mapCardAddress}>
-                  15 Baldwin Street, Whitby, ON L1M 1A2
-                </Text>
-              </View>
-              <View style={styles.mapCardAction}>
-                <Ionicons name="navigate" size={18} color="#D9A756" />
-                <Text style={styles.mapCardActionText}>Open in Maps</Text>
-              </View>
-            </LinearGradient>
-          </TouchableOpacity>
         </View>
 
+        {/* ── Opening Hours ── */}
+        <View style={styles.section}>
+          <Text style={styles.sectionOverline}>Hours</Text>
+          <Text style={styles.sectionTitle}>When We're Open</Text>
 
-        {/* === SUBJECT PICKER MODAL === */}
-        <Modal
-          visible={showSubjectPicker}
-          transparent
-          animationType="fade"
-          onRequestClose={() => setShowSubjectPicker(false)}
-        >
-          <TouchableOpacity
-            style={styles.modalOverlay}
-            activeOpacity={1}
-            onPress={() => setShowSubjectPicker(false)}
-          >
-            <View style={styles.modalContent}>
-              <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>Select Subject</Text>
-                <TouchableOpacity onPress={() => setShowSubjectPicker(false)}>
-                  <Ionicons
-                    name="close"
-                    size={24}
-                    color={colors.text.primary}
-                  />
-                </TouchableOpacity>
+          <View style={styles.hoursCard}>
+            {displayHours.map(({ days, time }, i) => (
+              <View key={i} style={[styles.hoursRow, i < displayHours.length - 1 && styles.hoursRowBorder]}>
+                <Text style={styles.hoursDays}>{days}</Text>
+                <Text style={[styles.hoursTime, time === "Closed" && styles.hoursTimeClosed]}>
+                  {time}
+                </Text>
               </View>
-              <GoldDivider width="100%" marginVertical={spacing.sm} />
-              <FlatList
-                data={SUBJECT_OPTIONS}
-                keyExtractor={(item) => item.value}
-                renderItem={({ item }) => (
-                  <TouchableOpacity
-                    style={[
-                      styles.modalOption,
-                      formData.subject === item.value &&
-                        styles.modalOptionSelected,
-                    ]}
-                    onPress={() => {
-                      updateField("subject", item.value);
-                      setShowSubjectPicker(false);
-                    }}
-                  >
-                    <Text
-                      style={[
-                        styles.modalOptionText,
-                        formData.subject === item.value &&
-                          styles.modalOptionTextSelected,
-                      ]}
-                    >
-                      {item.label}
-                    </Text>
-                    {formData.subject === item.value && (
-                      <Ionicons
-                        name="checkmark"
-                        size={20}
-                        color={colors.secondary.main}
-                      />
-                    )}
-                  </TouchableOpacity>
-                )}
-              />
+            ))}
+          </View>
+        </View>
+
+        {/* ── Address ── */}
+        <View style={styles.section}>
+          <Text style={styles.sectionOverline}>Location</Text>
+          <Text style={styles.sectionTitle}>Find Us</Text>
+
+          <View style={styles.addressCard}>
+            <View style={styles.addressRow}>
+              <View style={styles.addressIcon}>
+                <Ionicons name="location" size={20} color={colors.secondary.main} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.addressText}>{CONTACT_INFO.ADDRESS.STREET}</Text>
+                <Text style={styles.addressText}>
+                  {CONTACT_INFO.ADDRESS.CITY}, {CONTACT_INFO.ADDRESS.PROVINCE} {CONTACT_INFO.ADDRESS.POSTAL}
+                </Text>
+              </View>
             </View>
-          </TouchableOpacity>
-        </Modal>
+
+            <TouchableOpacity style={styles.directionsBtn}
+              onPress={() => Linking.openURL(EXTERNAL_URLS.GOOGLE_MAPS)} activeOpacity={0.85}>
+              <LinearGradient
+                colors={[colors.secondary.main, colors.secondary.dark]}
+                start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+                style={styles.directionsBtnGradient}
+              >
+                <Ionicons name="navigate" size={14} color="#1A0D0A" />
+                <Text style={styles.directionsBtnText}>Get Directions</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* ── Events Contact ── */}
+        <View style={[styles.section, { paddingTop: 0 }]}>
+          <View style={styles.eventsContactCard}>
+            <Ionicons name="calendar" size={20} color={colors.secondary.main} />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.eventsContactTitle}>Private Events & Bookings</Text>
+              <Text style={styles.eventsContactEmail}>{CONTACT_INFO.EMAIL_EVENTS}</Text>
+            </View>
+            <TouchableOpacity
+              style={styles.emailBtn}
+              onPress={() => Linking.openURL(`mailto:${CONTACT_INFO.EMAIL_EVENTS}`)}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="arrow-forward" size={16} color={colors.primary.main} />
+            </TouchableOpacity>
+          </View>
+        </View>
       </ScrollView>
 
-      {/* Floating call FAB */}
+      {/* ── Subject Picker Modal ── */}
+      <Modal visible={showSubjectPicker} transparent animationType="slide" onRequestClose={() => setShowSubjectPicker(false)}>
+        <Pressable style={styles.pickerOverlay} onPress={() => setShowSubjectPicker(false)}>
+          <Pressable style={[styles.pickerSheet, { paddingBottom: insets.bottom + spacing.base }]} onPress={() => {}}>
+            <View style={styles.pickerHandle} />
+            <Text style={styles.pickerTitle}>Select Subject</Text>
+            {SUBJECT_OPTIONS.map((opt) => (
+              <TouchableOpacity
+                key={opt.value}
+                style={[styles.pickerOption, formData.subject === opt.value && styles.pickerOptionActive]}
+                onPress={() => {
+                  setField("subject", opt.value);
+                  setShowSubjectPicker(false);
+                }}
+                activeOpacity={0.75}
+              >
+                <Text style={[styles.pickerOptionText, formData.subject === opt.value && styles.pickerOptionTextActive]}>
+                  {opt.label}
+                </Text>
+                {formData.subject === opt.value && (
+                  <Ionicons name="checkmark" size={18} color={colors.secondary.main} />
+                )}
+              </TouchableOpacity>
+            ))}
+          </Pressable>
+        </Pressable>
+      </Modal>
+
       <SocialFAB />
     </KeyboardAvoidingView>
   );
 }
 
-// ======================================================================
-// STYLES
-// ======================================================================
+// ─── Styles ───────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background.default },
-  contentContainer: { paddingBottom: 0 },
+  root: {
+    flex: 1,
+    backgroundColor: colors.background.default,
+  },
 
-  sectionHeaderWrap: {
-    alignItems: "center",
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing["2xl"],
+  // ── Header
+  header: {
+    paddingHorizontal: spacing.base,
+    paddingTop: spacing.base,
+    paddingBottom: spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border.light,
   },
-  overline: {
-    color: colors.secondary.main,
-    fontSize: typography.fontSize.xs,
-    fontWeight: typography.fontWeight.semibold,
-    letterSpacing: 3,
-    textTransform: "uppercase",
-    marginBottom: spacing.md,
-    textAlign: "center",
-  },
-  sectionTitle: {
+  headerTitle: {
     fontFamily: typography.fontFamily.heading,
     fontSize: typography.fontSize["3xl"],
     color: colors.text.primary,
-    textAlign: "center",
-    marginBottom: spacing.md,
-    letterSpacing: -0.5,
   },
-  sectionDesc: {
-    color: colors.primary.main,
-    fontSize: typography.fontSize.base,
-    lineHeight: 24,
-    textAlign: "center",
-    maxWidth: 500,
-    letterSpacing: 0.2,
+  headerSubtitle: {
+    fontFamily: typography.fontFamily.bodyMedium,
+    fontSize: typography.fontSize.sm,
+    color: colors.text.muted,
+    marginTop: 2,
   },
 
-  cardsContainer: {
-    paddingHorizontal: spacing.base,
-    paddingTop: spacing.xl,
-    gap: spacing.base,
-    marginBottom: spacing.xl,
+  // ── Quick Contact
+  quickContactRow: {
+    flexDirection: "row",
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border.light,
+    backgroundColor: colors.background.paper,
   },
-
-  addressText: {
-    color: "#4A2C17",
-    fontSize: typography.fontSize.base,
-    lineHeight: 24,
-  },
-  addressBold: {
-    fontWeight: typography.fontWeight.bold,
-    color: colors.text.primary,
-  },
-  directionsBtn: {
+  quickContactBtn: {
+    flex: 1,
     flexDirection: "row",
     alignItems: "center",
-    marginTop: spacing.sm,
-    gap: spacing.xs,
+    gap: spacing.sm,
+    padding: spacing.base,
   },
-  directionsText: {
-    color: colors.secondary.main,
-    fontWeight: typography.fontWeight.semibold,
-    fontSize: typography.fontSize.sm,
+  quickContactIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: borderRadius.md,
+    backgroundColor: "rgba(217,167,86,0.12)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  quickContactText: {
+    fontFamily: typography.fontFamily.bodyMedium,
+    fontSize: typography.fontSize.xs,
+    color: colors.text.secondary,
+    flex: 1,
   },
 
-  hoursContainer: { marginTop: spacing.xs },
+  // ── Sections
+  section: {
+    paddingHorizontal: spacing.base,
+    paddingTop: spacing["2xl"],
+    paddingBottom: spacing.base,
+  },
+  sectionOverline: {
+    fontFamily: typography.fontFamily.bodySemibold,
+    fontSize: typography.fontSize.xs,
+    color: colors.secondary.main,
+    letterSpacing: 1.5,
+    textTransform: "uppercase",
+    marginBottom: 4,
+  },
+  sectionTitle: {
+    fontFamily: typography.fontFamily.heading,
+    fontSize: typography.fontSize["2xl"],
+    color: colors.text.primary,
+    marginBottom: spacing.base,
+  },
+
+  // ── Form
+  form: { gap: 0 },
+  fieldWrap: { marginBottom: spacing.base },
+  fieldLabel: {
+    fontFamily: typography.fontFamily.bodyMedium,
+    fontSize: typography.fontSize.sm,
+    color: colors.text.primary,
+    marginBottom: spacing.xs,
+  },
+  required: { color: colors.secondary.main },
+  optional: {
+    fontFamily: typography.fontFamily.body,
+    fontSize: typography.fontSize.xs,
+    color: colors.text.muted,
+  },
+  fieldInput: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: colors.background.paper,
+    borderRadius: borderRadius.md,
+    borderWidth: 1.5,
+    borderColor: colors.border.light,
+    paddingHorizontal: spacing.md,
+    paddingVertical: Platform.OS === "ios" ? spacing.md : spacing.sm,
+    minHeight: 50,
+  },
+  fieldInputError: {
+    borderColor: colors.error,
+  },
+  fieldInputMulti: {
+    alignItems: "flex-start",
+    paddingVertical: spacing.md,
+  },
+  fieldIcon: {
+    marginRight: spacing.sm,
+  },
+  fieldTextInput: {
+    flex: 1,
+    fontFamily: typography.fontFamily.body,
+    fontSize: typography.fontSize.base,
+    color: colors.text.primary,
+    padding: 0,
+    margin: 0,
+  },
+  fieldError: {
+    fontFamily: typography.fontFamily.bodyMedium,
+    fontSize: typography.fontSize.xs,
+    color: colors.error,
+    marginTop: 4,
+    marginLeft: 4,
+  },
+
+  // ── Submit
+  submitBtn: {
+    borderRadius: borderRadius.full,
+    overflow: "hidden",
+    marginTop: spacing.sm,
+    ...shadows.md,
+  },
+  submitBtnGradient: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: spacing.sm,
+    paddingVertical: spacing.base,
+  },
+  submitBtnText: {
+    fontFamily: typography.fontFamily.bodySemibold,
+    fontSize: typography.fontSize.base,
+    color: "#FFFDFB",
+    letterSpacing: 0.3,
+  },
+
+  // ── Success Card
+  successCard: {
+    borderRadius: borderRadius.xl,
+    overflow: "hidden",
+    padding: spacing.xl,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "rgba(34,197,94,0.2)",
+    gap: spacing.sm,
+  },
+  successIconWrap: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: "rgba(34,197,94,0.12)",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: spacing.sm,
+  },
+  successTitle: {
+    fontFamily: typography.fontFamily.heading,
+    fontSize: typography.fontSize["2xl"],
+    color: colors.text.primary,
+  },
+  successDesc: {
+    fontFamily: typography.fontFamily.body,
+    fontSize: typography.fontSize.base,
+    color: colors.text.muted,
+    textAlign: "center",
+    lineHeight: 22,
+  },
+
+  // ── Hours
+  hoursCard: {
+    backgroundColor: colors.background.paper,
+    borderRadius: borderRadius.lg,
+    borderWidth: 1,
+    borderColor: colors.border.light,
+    overflow: "hidden",
+    ...shadows.sm,
+  },
   hoursRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.base,
+    paddingVertical: spacing.md,
   },
   hoursRowBorder: {
     borderBottomWidth: 1,
     borderBottomColor: colors.border.light,
   },
   hoursDays: {
-    fontWeight: typography.fontWeight.bold,
+    fontFamily: typography.fontFamily.bodyMedium,
+    fontSize: typography.fontSize.base,
     color: colors.text.primary,
-    fontSize: typography.fontSize.sm,
-    letterSpacing: 0.5,
   },
   hoursTime: {
-    color: colors.primary.main,
-    fontWeight: typography.fontWeight.medium,
-    fontSize: typography.fontSize.sm,
+    fontFamily: typography.fontFamily.bodySemibold,
+    fontSize: typography.fontSize.base,
+    color: colors.secondary.dark,
+  },
+  hoursTimeClosed: {
+    color: colors.text.muted,
+    fontFamily: typography.fontFamily.body,
   },
 
-  formWrapper: {
-    marginHorizontal: spacing.base,
-    marginBottom: spacing["2xl"],
-    borderRadius: borderRadius["2xl"],
-    backgroundColor: "rgba(255,255,255,0.98)",
+  // ── Address
+  addressCard: {
+    backgroundColor: colors.background.paper,
+    borderRadius: borderRadius.lg,
     borderWidth: 1,
-    borderColor: "rgba(217,167,86,0.25)",
-    overflow: "hidden",
-    shadowColor: "rgba(106,58,30,0.12)",
-    shadowOffset: { width: 0, height: 20 },
-    shadowOpacity: 1,
-    shadowRadius: 30,
-    elevation: 8,
+    borderColor: colors.border.light,
+    padding: spacing.base,
+    gap: spacing.base,
+    ...shadows.sm,
   },
-  formTopBar: { height: 4, width: "100%" },
-  formInner: { padding: spacing.lg },
-
-  formHeader: { alignItems: "center", marginBottom: spacing.xl },
-  formTitle: {
-    fontFamily: typography.fontFamily.heading,
-    fontSize: 30,
+  addressRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: spacing.md,
+  },
+  addressIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: borderRadius.md,
+    backgroundColor: "rgba(217,167,86,0.12)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  addressText: {
+    fontFamily: typography.fontFamily.bodyMedium,
+    fontSize: typography.fontSize.base,
     color: colors.text.primary,
-    marginBottom: spacing.sm,
-    letterSpacing: -0.3,
-  },
-  formSubtitle: {
-    color: colors.primary.main,
-    fontSize: typography.fontSize.sm,
     lineHeight: 22,
-    textAlign: "center",
-    marginBottom: spacing.base,
   },
-  responseBadge: {
+  directionsBtn: {
+    borderRadius: borderRadius.full,
+    overflow: "hidden",
+    alignSelf: "flex-start",
+  },
+  directionsBtnGradient: {
     flexDirection: "row",
     alignItems: "center",
-    gap: spacing.sm,
-    paddingHorizontal: spacing.base,
-    paddingVertical: spacing.sm,
-    borderRadius: borderRadius.xl,
-    backgroundColor: colors.glass.gold,
-    borderWidth: 1,
-    borderColor: colors.border.gold,
+    gap: 6,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.md,
   },
-  pulseDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 4,
-    backgroundColor: colors.success,
-  },
-  responseText: {
-    color: colors.primary.main,
-    fontSize: typography.fontSize.xs,
-    fontWeight: typography.fontWeight.semibold,
+  directionsBtnText: {
+    fontFamily: typography.fontFamily.bodySemibold,
+    fontSize: typography.fontSize.sm,
+    color: "#1A0D0A",
   },
 
-  conditionalSection: {
-    padding: spacing.base,
-    borderRadius: borderRadius.lg,
-    backgroundColor: "rgba(217,167,86,0.05)",
-    borderWidth: 2,
-    borderStyle: "dashed",
-    borderColor: colors.border.gold,
-    marginBottom: spacing.base,
-  },
-  conditionalHeader: {
+  // ── Events Contact Card
+  eventsContactCard: {
     flexDirection: "row",
     alignItems: "center",
     gap: spacing.md,
-    marginBottom: spacing.base,
+    backgroundColor: colors.background.paper,
+    borderRadius: borderRadius.lg,
+    borderWidth: 1,
+    borderColor: colors.border.light,
+    padding: spacing.base,
+    ...shadows.sm,
   },
-  conditionalIconBox: {
+  eventsContactTitle: {
+    fontFamily: typography.fontFamily.bodyMedium,
+    fontSize: typography.fontSize.base,
+    color: colors.text.primary,
+  },
+  eventsContactEmail: {
+    fontFamily: typography.fontFamily.body,
+    fontSize: typography.fontSize.sm,
+    color: colors.text.muted,
+    marginTop: 2,
+  },
+  emailBtn: {
     width: 36,
     height: 36,
-    borderRadius: 10,
-    backgroundColor: "rgba(217,167,86,0.2)",
+    borderRadius: borderRadius.md,
+    backgroundColor: "rgba(217,167,86,0.12)",
     alignItems: "center",
     justifyContent: "center",
   },
-  conditionalTitle: {
-    fontWeight: typography.fontWeight.bold,
-    color: colors.text.primary,
-    fontSize: typography.fontSize.base,
-  },
 
-  uploadBox: {
-    borderWidth: 2,
-    borderStyle: "dashed",
-    borderColor: colors.border.goldStrong,
-    borderRadius: borderRadius.lg,
-    paddingVertical: spacing.xl,
+  // ── Subject Picker Modal
+  pickerOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "flex-end",
+  },
+  pickerSheet: {
+    backgroundColor: colors.background.paper,
+    borderTopLeftRadius: borderRadius["2xl"],
+    borderTopRightRadius: borderRadius["2xl"],
+    paddingTop: spacing.md,
     paddingHorizontal: spacing.base,
-    alignItems: "center",
-    backgroundColor: "rgba(255,255,255,0.5)",
+    ...shadows.lg,
   },
-  uploadedFileName: {
-    color: colors.success,
-    fontWeight: typography.fontWeight.semibold,
-    fontSize: typography.fontSize.base,
-    marginBottom: spacing.xs,
-  },
-  uploadChangeText: {
-    color: colors.primary.main,
-    fontSize: typography.fontSize.sm,
-  },
-  uploadMainText: {
-    color: colors.text.primary,
-    fontWeight: typography.fontWeight.semibold,
-    fontSize: typography.fontSize.base,
-    marginBottom: spacing.xs,
-  },
-  uploadSubText: {
-    color: colors.primary.main,
-    fontSize: typography.fontSize.sm,
-  },
-
-  submitButton: {
+  pickerHandle: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: colors.border.gold,
     alignSelf: "center",
-    marginTop: spacing.sm,
-    borderRadius: borderRadius.lg,
-    overflow: "hidden",
-    ...shadows.gold,
+    marginBottom: spacing.base,
   },
-  submitButtonDisabled: { opacity: 0.6 },
-  submitGradient: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: spacing.md,
-    paddingVertical: spacing.base + 2,
-    paddingHorizontal: spacing["2xl"],
-    minHeight: 56,
-  },
-  submitText: {
-    color: colors.background.paper,
-    fontSize: typography.fontSize.lg,
-    fontWeight: typography.fontWeight.bold,
-  },
-
-  successContainer: {
-    alignItems: "center",
-    paddingVertical: spacing["3xl"],
-    paddingHorizontal: spacing.lg,
-  },
-  successCircle: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: colors.success,
-    marginBottom: spacing.xl,
-    shadowColor: "rgba(76, 175, 80, 0.4)",
-    shadowOffset: { width: 0, height: 20 },
-    shadowOpacity: 1,
-    shadowRadius: 30,
-    elevation: 12,
-  },
-  successTitle: {
-    fontFamily: typography.fontFamily.heading,
-    fontSize: 28,
-    fontWeight: "700" as const,
-    color: colors.text.primary,
-    marginBottom: spacing.md,
-    textAlign: "center",
-  },
-  successDesc: {
-    color: colors.primary.main,
-    fontSize: typography.fontSize.base,
-    lineHeight: 24,
-    textAlign: "center",
-    maxWidth: 400,
-    marginBottom: spacing.xl,
-  },
-  confirmBox: {
-    flexDirection: "row",
-    alignItems: "center",
-    padding: spacing.base,
-    borderRadius: borderRadius.xl,
-    backgroundColor: "rgba(217,167,86,0.1)",
-    borderWidth: 2,
-    borderColor: "rgba(217,167,86,0.3)",
-  },
-  confirmLabel: {
-    color: colors.text.muted,
-    fontSize: typography.fontSize.sm,
-    marginBottom: 2,
-  },
-  confirmEmail: {
-    color: colors.text.primary,
-    fontWeight: typography.fontWeight.semibold,
-    fontSize: typography.fontSize.base,
-  },
-
-  mapSection: {
-    paddingHorizontal: spacing.base,
-    marginTop: spacing.xl,
-    marginBottom: spacing["2xl"],
-    alignItems: "center",
-  },
-  mapTitle: {
+  pickerTitle: {
     fontFamily: typography.fontFamily.heading,
     fontSize: typography.fontSize["2xl"],
     color: colors.text.primary,
-    textAlign: "center",
-    marginBottom: spacing.lg,
-    letterSpacing: -0.5,
+    marginBottom: spacing.base,
   },
-  mapCard: {
-    width: "100%",
-    borderRadius: borderRadius.xl,
-    overflow: "hidden",
-    borderWidth: 1,
-    borderColor: "rgba(217,167,86,0.3)",
-    minHeight: 140,
-    ...shadows.lg,
-  },
-  mapCardGradient: {
-    padding: spacing.xl,
-    paddingVertical: spacing["2xl"],
-    alignItems: "center",
-    gap: spacing.md,
-    flexDirection: "column",
-    justifyContent: "center",
-    minHeight: 140,
-  },
-  mapCardInfo: {
-    alignItems: "center",
-    gap: spacing.xs,
-  },
-  mapCardTitle: {
-    fontFamily: typography.fontFamily.heading,
-    fontSize: typography.fontSize.lg,
-    color: "#F5EFE6",
-    letterSpacing: 0.5,
-  },
-  mapCardAddress: {
-    fontFamily: typography.fontFamily.body,
-    fontSize: typography.fontSize.sm,
-    color: "rgba(245,239,230,0.7)",
-    textAlign: "center",
-    lineHeight: 20,
-  },
-  mapCardAction: {
+  pickerOption: {
     flexDirection: "row",
     alignItems: "center",
-    gap: spacing.sm,
-    paddingHorizontal: spacing.xl,
+    justifyContent: "space-between",
     paddingVertical: spacing.md,
-    borderRadius: 30,
-    borderWidth: 1,
-    borderColor: "rgba(217,167,86,0.5)",
-    backgroundColor: "rgba(217,167,86,0.12)",
-    marginTop: spacing.xs,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border.light,
   },
-  mapCardActionText: {
-    fontFamily: typography.fontFamily.bodySemibold,
-    fontSize: typography.fontSize.sm,
-    color: "#D9A756",
-    letterSpacing: 0.5,
+  pickerOptionActive: {
+    backgroundColor: "rgba(217,167,86,0.06)",
   },
-
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: colors.overlay.medium,
-    justifyContent: "center",
-    alignItems: "center",
-    paddingHorizontal: spacing["2xl"],
-  },
-  modalContent: {
-    width: "100%",
-    maxWidth: 400,
-    backgroundColor: colors.background.paper,
-    borderRadius: borderRadius.xl,
-    padding: spacing.lg,
-    maxHeight: "70%",
-    ...shadows.lg,
-  },
-  modalHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  modalTitle: {
-    fontFamily: typography.fontFamily.heading,
-    fontSize: typography.fontSize.xl,
-    color: colors.text.primary,
-  },
-  modalOption: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingVertical: spacing.md + 2,
-    paddingHorizontal: spacing.sm,
-    borderRadius: borderRadius.base,
-  },
-  modalOptionSelected: { backgroundColor: "rgba(217,167,86,0.1)" },
-  modalOptionText: {
+  pickerOptionText: {
+    fontFamily: typography.fontFamily.bodyMedium,
     fontSize: typography.fontSize.base,
     color: colors.text.primary,
   },
-  modalOptionTextSelected: {
-    color: colors.secondary.main,
-    fontWeight: typography.fontWeight.semibold,
+  pickerOptionTextActive: {
+    color: colors.secondary.dark,
+    fontFamily: typography.fontFamily.bodySemibold,
   },
 });

@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from "react";
-import { View, Animated, StyleSheet, ViewStyle } from "react-native";
+import { View, Animated, StyleSheet, ViewStyle, useWindowDimensions } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
 import { colors, borderRadius, spacing } from "../../config/theme";
 
 interface SkeletonProps {
@@ -9,24 +10,45 @@ interface SkeletonProps {
   style?: ViewStyle;
 }
 
+const SHIMMER_DURATION = 1200;
+
 export function SkeletonBox({ width = "100%", height = 16, borderRadius: br = 8, style }: SkeletonProps) {
-  const shimmer = useRef(new Animated.Value(0)).current;
+  const { width: screenWidth } = useWindowDimensions();
+  const translateX = useRef(new Animated.Value(-screenWidth)).current;
 
   useEffect(() => {
     Animated.loop(
-      Animated.sequence([
-        Animated.timing(shimmer, { toValue: 1, duration: 900, useNativeDriver: true }),
-        Animated.timing(shimmer, { toValue: 0, duration: 900, useNativeDriver: true }),
-      ])
+      Animated.timing(translateX, {
+        toValue: screenWidth,
+        duration: SHIMMER_DURATION,
+        useNativeDriver: true,
+      })
     ).start();
-  }, [shimmer]);
-
-  const opacity = shimmer.interpolate({ inputRange: [0, 1], outputRange: [0.35, 0.7] });
+    return () => translateX.stopAnimation();
+  }, [translateX, screenWidth]);
 
   return (
-    <Animated.View
-      style={[{ width: width as any, height, borderRadius: br, backgroundColor: colors.cream, opacity }, style]}
-    />
+    <View
+      style={[{ width: width as any, height, borderRadius: br, backgroundColor: "#E8DDD4", overflow: "hidden" }, style]}
+    >
+      <Animated.View
+        style={{
+          position: "absolute",
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          transform: [{ translateX }],
+        }}
+      >
+        <LinearGradient
+          colors={["transparent", "rgba(255,255,255,0.45)", "transparent"]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 0 }}
+          style={{ flex: 1, width: screenWidth }}
+        />
+      </Animated.View>
+    </View>
   );
 }
 

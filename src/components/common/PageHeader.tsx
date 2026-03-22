@@ -8,7 +8,9 @@ import {
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { colors, typography, spacing } from "../../config/theme";
+import { useResponsive } from "../../utils/responsive";
 
 interface PageHeaderProps {
   title: string;
@@ -22,6 +24,8 @@ interface PageHeaderProps {
  * Replaces the 280px HeroSection on inner screens.
  */
 export default function PageHeader({ title, subtitle, icon }: PageHeaderProps) {
+  const insets = useSafeAreaInsets();
+  const { isSmallPhone } = useResponsive();
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(12)).current;
 
@@ -42,12 +46,14 @@ export default function PageHeader({ title, subtitle, icon }: PageHeaderProps) {
     ]).start();
   }, []);
 
+  const titleFontSize = isSmallPhone ? 32 : 40;
+
   return (
     <LinearGradient
       colors={[colors.primary.dark, "#2A1508", colors.primary.dark]}
       start={{ x: 0, y: 0 }}
       end={{ x: 1, y: 1 }}
-      style={styles.container}
+      style={[styles.container, { paddingTop: insets.top }]}
     >
       {/* Subtle texture overlay */}
       <View style={styles.noiseOverlay} />
@@ -84,11 +90,11 @@ export default function PageHeader({ title, subtitle, icon }: PageHeaderProps) {
           </View>
 
           {/* Title */}
-          <Text style={styles.title}>{title}</Text>
+          <Text style={[styles.title, { fontSize: titleFontSize, lineHeight: titleFontSize * 1.1 }]}>{title}</Text>
 
           {/* Subtitle */}
           {subtitle && (
-            <Text style={styles.subtitle} numberOfLines={2}>
+            <Text style={styles.subtitle}>
               {subtitle}
             </Text>
           )}
@@ -144,16 +150,15 @@ const styles = StyleSheet.create({
   },
   overline: {
     fontFamily: typography.fontFamily.bodySemibold,
-    fontSize: 9,
+    fontSize: 11,
     letterSpacing: 3,
     color: colors.secondary.main,
     textTransform: "uppercase",
   },
   title: {
     fontFamily: typography.fontFamily.heading,
-    fontSize: 40,
+    // fontSize and lineHeight set dynamically via inline style
     color: colors.text.light,
-    lineHeight: 40 * 1.1,
     letterSpacing: -0.5,
   },
   subtitle: {

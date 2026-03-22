@@ -235,7 +235,7 @@ export function Modal({
             ]}
             accessibilityViewIsModal={true}
             accessible={true}
-            aria-modal="true"
+            aria-modal={true}
           >
             {/* Drag handle (bottom variant only) */}
             {variant === "bottom" && enableGesture && (
