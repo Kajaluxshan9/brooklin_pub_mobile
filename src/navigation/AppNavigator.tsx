@@ -13,6 +13,8 @@ import MenuScreen from "../screens/MenuScreen";
 import EventsScreen from "../screens/EventsScreen";
 import ContactScreen from "../screens/ContactScreen";
 import SpecialScreen from "../screens/SpecialScreen";
+import PrivacyPolicyScreen from "../screens/PrivacyPolicyScreen";
+import TermsScreen from "../screens/TermsScreen";
 import OfflineBanner from "../components/common/OfflineBanner";
 
 import { colors, typography, spacing } from "../config/theme";
@@ -39,6 +41,8 @@ export type MenuStackParamList = {
 export type InfoStackParamList = {
   About: undefined;
   Contact: undefined;
+  PrivacyPolicy: undefined;
+  Terms: undefined;
 };
 
 // ─── Stack Navigators ────────────────────────────────────────────────────────
@@ -80,6 +84,8 @@ const InfoStackNavigator = () => (
   >
     <InfoStack.Screen name="About" component={AboutScreen} />
     <InfoStack.Screen name="Contact" component={ContactScreen} />
+    <InfoStack.Screen name="PrivacyPolicy" component={PrivacyPolicyScreen} />
+    <InfoStack.Screen name="Terms" component={TermsScreen} />
   </InfoStack.Navigator>
 );
 

@@ -10,6 +10,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
+import { useNavigation } from "@react-navigation/native";
 import { colors, typography, spacing, borderRadius } from "../../config/theme";
 import { EXTERNAL_URLS, CONTACT_INFO } from "../../config/constants";
 import { useApiWithCache } from "../../hooks/useApi";
@@ -114,6 +115,7 @@ interface FooterProps {
 }
 
 export default function Footer({ openStatus: externalStatus }: FooterProps) {
+  const navigation = useNavigation<any>();
   const [tick, setTick] = useState(0);
   const { data: allHours } = useApiWithCache<OpeningHours[]>(
     "footer-opening-hours",
@@ -406,6 +408,15 @@ export default function Footer({ openStatus: externalStatus }: FooterProps) {
             © {new Date().getFullYear()} Brooklin Pub. All rights reserved.
           </Text>
         </View>
+        <View style={styles.legalLinksRow}>
+          <TouchableOpacity onPress={() => navigation.navigate("PrivacyPolicy")}>
+            <Text style={styles.legalLink}>Privacy Policy</Text>
+          </TouchableOpacity>
+          <Text style={styles.legalSeparator}>|</Text>
+          <TouchableOpacity onPress={() => navigation.navigate("Terms")}>
+            <Text style={styles.legalLink}>Terms &amp; Conditions</Text>
+          </TouchableOpacity>
+        </View>
         <TouchableOpacity
           onPress={() => openLink("https://www.akvisionsystems.com/")}
         >
@@ -691,5 +702,21 @@ const styles = StyleSheet.create({
   creditHighlight: {
     color: "#D9A756",
     fontFamily: typography.fontFamily.bodySemibold,
+  },
+  legalLinksRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+  },
+  legalLink: {
+    fontFamily: typography.fontFamily.bodyMedium,
+    fontSize: typography.fontSize.xs,
+    color: "rgba(245,239,230,0.35)",
+    textDecorationLine: "underline",
+  },
+  legalSeparator: {
+    fontFamily: typography.fontFamily.body,
+    fontSize: typography.fontSize.xs,
+    color: "rgba(245,239,230,0.15)",
   },
 });

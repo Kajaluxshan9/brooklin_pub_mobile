@@ -172,19 +172,25 @@ const MenuItemRow = React.memo(({
         <View style={styles.menuItemTextBlock}>
           <Text style={styles.menuItemName}>{item.name}</Text>
           {item.desc ? (
-            <Text style={styles.menuItemDesc} numberOfLines={2}>{item.desc}</Text>
+            <Text style={styles.menuItemDesc} numberOfLines={2}>
+              {item.desc}
+            </Text>
           ) : null}
-          {item.hasMeasurements && item.measurements && item.measurements.length > 0 && (
-            <View style={styles.sizesRow}>
-              {item.measurements.slice(0, 3).map((m: any) => (
-                <Text key={m.id} style={styles.sizeText}>
-                  {m.measurementType?.name ?? m.measurementTypeEntity?.name ?? ""}
-                  {" "}${parseFloat(m.price).toFixed(2)}
-                </Text>
-              ))}
-            </View>
-          )}
-          {((item.dietaryInfo?.length ?? 0) > 0) && (
+          {item.hasMeasurements &&
+            item.measurements &&
+            item.measurements.length > 0 && (
+              <View style={styles.sizesRow}>
+                {item.measurements.slice(0, 3).map((m: any) => (
+                  <Text key={m.id} style={styles.sizeText}>
+                    {m.measurementType?.name ??
+                      m.measurementTypeEntity?.name ??
+                      ""}{" "}
+                    ${parseFloat(m.price).toFixed(2)}
+                  </Text>
+                ))}
+              </View>
+            )}
+          {(item.dietaryInfo?.length ?? 0) > 0 && (
             <View style={styles.inlineTagsRow}>
               {item.dietaryInfo!.slice(0, 3).map((tag) => (
                 <View key={tag} style={styles.inlineTag}>
@@ -202,6 +208,7 @@ const MenuItemRow = React.memo(({
               style={styles.menuItemThumb}
               contentFit="cover"
               transition={200}
+              recyclingKey={`thumb-${item.id}`}
             />
           ) : null}
           {item.price ? (
@@ -215,59 +222,78 @@ const MenuItemRow = React.memo(({
 
 // ─── Category Section ─────────────────────────────────────────────────────────
 
-const CategorySection = ({
-  section,
-  onItemPress,
-}: {
-  section: MenuSection;
-  onItemPress: (item: DisplayMenuItem) => void;
-}) => {
-  const [collapsed, setCollapsed] = useState(false);
-  const chevronAnim = useRef(new Animated.Value(0)).current;
+const CategorySection = React.memo(
+  ({
+    section,
+    onItemPress,
+  }: {
+    section: MenuSection;
+    onItemPress: (item: DisplayMenuItem) => void;
+  }) => {
+    const [collapsed, setCollapsed] = useState(false);
+    const chevronAnim = useRef(new Animated.Value(0)).current;
 
-  const toggleCollapse = () => {
-    Animated.timing(chevronAnim, {
-      toValue: collapsed ? 0 : 1,
-      duration: 200,
-      useNativeDriver: true,
-    }).start();
-    setCollapsed((c) => !c);
-  };
+    const toggleCollapse = () => {
+      Animated.timing(chevronAnim, {
+        toValue: collapsed ? 0 : 1,
+        duration: 200,
+        useNativeDriver: true,
+      }).start();
+      setCollapsed((c) => !c);
+    };
 
-  const rotation = chevronAnim.interpolate({ inputRange: [0, 1], outputRange: ["0deg", "-90deg"] });
+    const rotation = chevronAnim.interpolate({
+      inputRange: [0, 1],
+      outputRange: ["0deg", "-90deg"],
+    });
 
-  return (
-    <View style={styles.categorySection}>
-      {/* Category header */}
-      <TouchableOpacity style={styles.categoryHeader} onPress={toggleCollapse} activeOpacity={0.75}>
-        <View style={styles.categoryHeaderLeft}>
-          <Text style={styles.categoryName}>{section.name}</Text>
-          {section.description ? (
-            <Text style={styles.categoryDesc} numberOfLines={1}>{section.description}</Text>
-          ) : null}
-        </View>
-        <View style={styles.categoryHeaderRight}>
-          <Text style={styles.categoryCount}>{section.items.length} items</Text>
-          <Animated.View style={{ transform: [{ rotate: rotation }] }}>
-            <Ionicons name="chevron-down" size={18} color={colors.text.muted} />
-          </Animated.View>
-        </View>
-      </TouchableOpacity>
+    return (
+      <View style={styles.categorySection}>
+        {/* Category header */}
+        <TouchableOpacity
+          style={styles.categoryHeader}
+          onPress={toggleCollapse}
+          activeOpacity={0.75}
+        >
+          <View style={styles.categoryHeaderLeft}>
+            <Text style={styles.categoryName}>{section.name}</Text>
+            {section.description ? (
+              <Text style={styles.categoryDesc} numberOfLines={1}>
+                {section.description}
+              </Text>
+            ) : null}
+          </View>
+          <View style={styles.categoryHeaderRight}>
+            <Text style={styles.categoryCount}>
+              {section.items.length} items
+            </Text>
+            <Animated.View style={{ transform: [{ rotate: rotation }] }}>
+              <Ionicons
+                name="chevron-down"
+                size={18}
+                color={colors.text.muted}
+              />
+            </Animated.View>
+          </View>
+        </TouchableOpacity>
 
-      {/* Items */}
-      {!collapsed && (
-        <View style={styles.categoryItems}>
-          {section.items.map((item, idx) => (
-            <React.Fragment key={item.id}>
-              <MenuItemRow item={item} onPress={() => onItemPress(item)} />
-              {idx < section.items.length - 1 && <View style={styles.itemDivider} />}
-            </React.Fragment>
-          ))}
-        </View>
-      )}
-    </View>
-  );
-};
+        {/* Items */}
+        {!collapsed && (
+          <View style={styles.categoryItems}>
+            {section.items.map((item, idx) => (
+              <React.Fragment key={item.id}>
+                <MenuItemRow item={item} onPress={() => onItemPress(item)} />
+                {idx < section.items.length - 1 && (
+                  <View style={styles.itemDivider} />
+                )}
+              </React.Fragment>
+            ))}
+          </View>
+        )}
+      </View>
+    );
+  },
+);
 
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 
@@ -382,6 +408,21 @@ export default function MenuScreen({ navigation, route }: any) {
   const isLoading = pcLoading || catLoading || itemsLoading;
   const selectedPrimary = activePrimaryCategories.find((p) => p.id === selectedPrimaryId);
 
+  const handleItemPress = useCallback(
+    (item: DisplayMenuItem) => {
+      if (
+        item.desc ||
+        item.hasMeasurements ||
+        (item.dietaryInfo?.length ?? 0) > 0
+      ) {
+        light();
+        setSelectedItem(item);
+        setShowItemModal(true);
+      }
+    },
+    [light],
+  );
+
   if (pcError) return <ErrorView message={pcError} onRetry={pcRefetch} />;
 
   return (
@@ -414,8 +455,15 @@ export default function MenuScreen({ navigation, route }: any) {
             clearButtonMode="while-editing"
           />
           {searchQuery.length > 0 && (
-            <TouchableOpacity onPress={() => setSearchQuery("")} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-              <Ionicons name="close-circle" size={16} color={colors.text.muted} />
+            <TouchableOpacity
+              onPress={() => setSearchQuery("")}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Ionicons
+                name="close-circle"
+                size={16}
+                color={colors.text.muted}
+              />
             </TouchableOpacity>
           )}
         </View>
@@ -442,7 +490,9 @@ export default function MenuScreen({ navigation, route }: any) {
                   }}
                   activeOpacity={0.75}
                 >
-                  <Text style={[styles.chipText, active && styles.chipTextActive]}>
+                  <Text
+                    style={[styles.chipText, active && styles.chipTextActive]}
+                  >
                     {item.name}
                   </Text>
                 </TouchableOpacity>
@@ -471,11 +521,17 @@ export default function MenuScreen({ navigation, route }: any) {
       >
         {isLoading ? (
           <View style={styles.skeletonContainer}>
-            {[1, 2, 3, 4].map((i) => <MenuItemSkeleton key={i} />)}
+            {[1, 2, 3, 4].map((i) => (
+              <MenuItemSkeleton key={i} />
+            ))}
           </View>
         ) : filteredSections.length === 0 ? (
           <View style={styles.emptyState}>
-            <Ionicons name="search-outline" size={44} color={colors.border.gold} />
+            <Ionicons
+              name="search-outline"
+              size={44}
+              color={colors.border.gold}
+            />
             <Text style={styles.emptyTitle}>
               {searchQuery ? "No results found" : "No items available"}
             </Text>
@@ -485,7 +541,10 @@ export default function MenuScreen({ navigation, route }: any) {
                 : "Check back soon for updates."}
             </Text>
             {searchQuery ? (
-              <TouchableOpacity style={styles.clearSearchBtn} onPress={() => setSearchQuery("")}>
+              <TouchableOpacity
+                style={styles.clearSearchBtn}
+                onPress={() => setSearchQuery("")}
+              >
                 <Text style={styles.clearSearchText}>Clear Search</Text>
               </TouchableOpacity>
             ) : null}
@@ -495,13 +554,7 @@ export default function MenuScreen({ navigation, route }: any) {
             <CategorySection
               key={section.categoryId}
               section={section}
-              onItemPress={(item) => {
-                if (item.desc || item.hasMeasurements || (item.dietaryInfo?.length ?? 0) > 0) {
-                  light();
-                  setSelectedItem(item);
-                  setShowItemModal(true);
-                }
-              }}
+              onItemPress={handleItemPress}
             />
           ))
         )}
