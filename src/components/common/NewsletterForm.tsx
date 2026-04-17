@@ -13,11 +13,8 @@ import {
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { colors, typography, spacing, borderRadius, shadows } from "../../config/theme";
 import { newsletterService } from "../../services/newsletter.service";
-
-const NEWSLETTER_KEY = "@brooklin_newsletter_subscribed";
 
 function validateEmail(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
@@ -34,16 +31,8 @@ export default function NewsletterForm({ onSuccess, compact = false }: Newslette
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [alreadySubscribed, setAlreadySubscribed] = useState(false);
-
   const checkmarkScale = useRef(new Animated.Value(0)).current;
   const emailInputRef = useRef<TextInput>(null);
-
-  React.useEffect(() => {
-    AsyncStorage.getItem(NEWSLETTER_KEY).then((val) => {
-      if (val === "true") setAlreadySubscribed(true);
-    });
-  }, []);
 
   const animateSuccess = useCallback(() => {
     Animated.spring(checkmarkScale, {
@@ -70,15 +59,9 @@ export default function NewsletterForm({ onSuccess, compact = false }: Newslette
 
     try {
       await newsletterService.subscribe({ email: email.trim(), name: name.trim() || undefined });
-      await AsyncStorage.setItem(NEWSLETTER_KEY, "true");
-      setSuccess(true);
-      setLoading(false);
-      animateSuccess();
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      onSuccess?.();
     } catch {
-      // Treat backend errors gracefully — still store subscription locally
-      await AsyncStorage.setItem(NEWSLETTER_KEY, "true");
+      // Treat backend errors gracefully
+    } finally {
       setSuccess(true);
       setLoading(false);
       animateSuccess();
@@ -87,7 +70,7 @@ export default function NewsletterForm({ onSuccess, compact = false }: Newslette
     }
   }, [email, name, animateSuccess, onSuccess]);
 
-  if (alreadySubscribed || success) {
+  if (success) {
     return (
       <View style={styles.successContainer}>
         <Animated.View style={[styles.successIcon, { transform: [{ scale: checkmarkScale }] }]}>

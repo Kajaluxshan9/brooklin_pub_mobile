@@ -1,11 +1,11 @@
 import React from "react";
-import { StyleSheet, View, Platform } from "react-native";
+import { StyleSheet, View, useWindowDimensions } from "react-native";
 import { NavigationContainer } from "@react-navigation/native";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { Ionicons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
-import { LinearGradient } from "expo-linear-gradient";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import HomeScreen from "../screens/HomeScreen";
 import AboutScreen from "../screens/AboutScreen";
@@ -15,9 +15,8 @@ import ContactScreen from "../screens/ContactScreen";
 import SpecialScreen from "../screens/SpecialScreen";
 import PrivacyPolicyScreen from "../screens/PrivacyPolicyScreen";
 import TermsScreen from "../screens/TermsScreen";
-import OfflineBanner from "../components/common/OfflineBanner";
 
-import { colors, typography, spacing } from "../config/theme";
+import { colors, typography } from "../config/theme";
 
 // ─── Type definitions ────────────────────────────────────────────────────────
 export type RootTabParamList = {
@@ -109,17 +108,19 @@ const TabBarIcon = ({
   focused,
   color,
   routeName,
+  iconSize,
 }: {
   focused: boolean;
   color: string;
   routeName: keyof RootTabParamList;
+  iconSize: number;
 }) => {
   const icons = TAB_ICONS[routeName];
   const iconName = focused ? icons.focused : icons.outline;
   return (
     <View style={styles.tabIconContainer}>
       {focused && <View style={styles.tabActiveBackground} />}
-      <Ionicons name={iconName} size={22} color={color} />
+      <Ionicons name={iconName} size={iconSize} color={color} />
     </View>
   );
 };
@@ -134,11 +135,19 @@ const GlassTabBarBackground = () => (
 
 // ─── Main Tab Navigator ─────────────────────────────────────────────────────
 const AppNavigator = () => {
+  const insets = useSafeAreaInsets();
+  const { width: screenWidth } = useWindowDimensions();
+
+  const isSmall = screenWidth < 360;
+  const isTablet = screenWidth >= 600;
+
+  const tabBarHeight = isSmall ? 58 : isTablet ? 70 : 64;
+  const iconSize = isSmall ? 20 : isTablet ? 26 : 22;
+  const labelSize = isSmall ? 10 : isTablet ? 12 : 11;
+  const paddingBottom = insets.bottom;
+
   return (
     <NavigationContainer>
-      {/* Offline banner rendered at root so it overlays all screens */}
-      <OfflineBanner />
-
       <Tab.Navigator
         screenOptions={({ route }) => ({
           headerShown: false,
@@ -147,15 +156,24 @@ const AppNavigator = () => {
               focused={focused}
               color={color}
               routeName={route.name}
+              iconSize={iconSize}
             />
           ),
           tabBarActiveTintColor: "#D9A756",
           tabBarInactiveTintColor: "rgba(106,58,30,0.45)",
           tabBarShowLabel: true,
-          tabBarLabelStyle: styles.tabBarLabel,
-          tabBarStyle: styles.tabBar,
-          tabBarItemStyle: styles.tabBarItem,
+          tabBarLabelStyle: [styles.tabBarLabel, { fontSize: labelSize }],
+          tabBarStyle: {
+            ...styles.tabBar,
+            bottom: 0,
+            left: 0,
+            right: 0,
+            height: tabBarHeight + paddingBottom,
+            paddingBottom,
+          },
+          tabBarItemStyle: [styles.tabBarItem, { height: tabBarHeight }],
           tabBarBackground: () => <GlassTabBarBackground />,
+          tabBarHideOnKeyboard: true,
         })}
         initialRouteName="HomeTab"
       >
@@ -192,7 +210,7 @@ const AppNavigator = () => {
 const styles = StyleSheet.create({
   glassTabBarBg: {
     ...StyleSheet.absoluteFillObject,
-    borderRadius: 28,
+    borderRadius: 0,
     overflow: "hidden",
     backgroundColor: "rgba(255,253,251,0.95)",
   },
@@ -207,11 +225,8 @@ const styles = StyleSheet.create({
   },
   tabBar: {
     position: "absolute",
-    bottom: Platform.OS === "ios" ? 24 : 16,
-    left: 12,
-    right: 12,
-    height: 64,
-    borderRadius: 28,
+    bottom: 0,
+    borderRadius: 0,
     borderTopWidth: 0,
     backgroundColor: "transparent",
     borderWidth: 1,
@@ -227,17 +242,15 @@ const styles = StyleSheet.create({
   },
   tabBarItem: {
     flex: 1,
-    paddingVertical: 0,
-    height: 64,
     justifyContent: "center",
     alignItems: "center",
+    paddingVertical: 6,
   },
   tabBarLabel: {
     fontFamily: typography.fontFamily.bodySemibold,
     fontSize: 11,
     letterSpacing: 0.1,
-    marginTop: -2,
-    marginBottom: 4,
+    marginTop: 2,
   },
   tabIconContainer: {
     alignItems: "center",

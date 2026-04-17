@@ -11,6 +11,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { colors, typography, spacing, borderRadius } from "../config/theme";
+import { useScrollBottomPadding } from "../config/layout";
 
 const LAST_UPDATED = "March 29, 2025";
 const CONTACT_EMAIL = "brooklinpub@gmail.com";
@@ -31,6 +32,7 @@ const Para = ({ children }: { children: string | React.ReactNode }) => (
 
 export default function PrivacyPolicyScreen() {
   const navigation = useNavigation();
+  const scrollBottomPad = useScrollBottomPadding();
 
   return (
     <SafeAreaView style={styles.safeArea} edges={["top"]}>
@@ -49,7 +51,10 @@ export default function PrivacyPolicyScreen() {
 
       <ScrollView
         style={styles.scroll}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: scrollBottomPad },
+        ]}
         showsVerticalScrollIndicator={false}
       >
         {/* Intro card */}
@@ -119,8 +124,8 @@ export default function PrivacyPolicyScreen() {
 
         <SectionTitle title="7. Changes to This Policy" />
         <Para>
-          We may update our Privacy Policy from time to time. We will notify
-          you of any changes by posting the updated policy on our website.
+          We may update our Privacy Policy from time to time. We will notify you
+          of any changes by posting the updated policy on our website.
         </Para>
 
         <SectionTitle title="8. Contact Us" />

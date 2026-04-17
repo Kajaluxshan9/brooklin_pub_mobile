@@ -31,8 +31,9 @@ import { getImageUrl } from "../services/api";
 import type { Event, EventType } from "../types/api.types";
 import { ErrorView } from "../components/common";
 import { EventCardSkeleton } from "../components/common/SkeletonLoader";
-import SocialFAB from "../components/common/SocialFAB";
+import FloatingCallButton from "../components/common/FloatingCallButton";
 import * as Haptics from "expo-haptics";
+import { useScrollBottomPadding } from "../config/layout";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -256,6 +257,7 @@ const EventCard = React.memo(({
 
 export default function EventsScreen({ navigation }: any) {
   const insets = useSafeAreaInsets();
+  const scrollBottomPad = useScrollBottomPadding();
   const { width: screenWidth } = useWindowDimensions();
   const [activeFilter, setActiveFilter] = useState<string | null>(null);
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
@@ -321,7 +323,10 @@ export default function EventsScreen({ navigation }: any) {
               const cfg = item ? TYPE_CONFIG[item] : null;
               return (
                 <TouchableOpacity
-                  style={[styles.filterChip, isActive && styles.filterChipActive]}
+                  style={[
+                    styles.filterChip,
+                    isActive && styles.filterChipActive,
+                  ]}
                   onPress={() => {
                     Haptics.selectionAsync();
                     setActiveFilter(item);
@@ -335,7 +340,12 @@ export default function EventsScreen({ navigation }: any) {
                       color={isActive ? "#FFFDFB" : cfg.color}
                     />
                   )}
-                  <Text style={[styles.filterChipText, isActive && styles.filterChipTextActive]}>
+                  <Text
+                    style={[
+                      styles.filterChipText,
+                      isActive && styles.filterChipTextActive,
+                    ]}
+                  >
                     {item ? TYPE_CONFIG[item].label : "All Events"}
                   </Text>
                 </TouchableOpacity>
@@ -348,7 +358,10 @@ export default function EventsScreen({ navigation }: any) {
       {/* ── Events List ── */}
       <ScrollView
         style={styles.scroll}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 100 }]}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: scrollBottomPad },
+        ]}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
@@ -361,11 +374,17 @@ export default function EventsScreen({ navigation }: any) {
       >
         {loading ? (
           <View style={styles.skeletonWrap}>
-            {[1, 2, 3].map((i) => <EventCardSkeleton key={i} />)}
+            {[1, 2, 3].map((i) => (
+              <EventCardSkeleton key={i} />
+            ))}
           </View>
         ) : filteredEvents.length === 0 ? (
           <View style={styles.emptyState}>
-            <Ionicons name="calendar-outline" size={52} color={colors.border.gold} />
+            <Ionicons
+              name="calendar-outline"
+              size={52}
+              color={colors.border.gold}
+            />
             <Text style={styles.emptyTitle}>
               {activeFilter ? "No events of this type" : "No Upcoming Events"}
             </Text>
@@ -395,12 +414,15 @@ export default function EventsScreen({ navigation }: any) {
               </Text>
               <TouchableOpacity
                 style={styles.hostCTABtn}
-                onPress={() => navigation.navigate("InfoTab", { screen: "Contact" })}
+                onPress={() =>
+                  navigation.navigate("InfoTab", { screen: "Contact" })
+                }
                 activeOpacity={0.85}
               >
                 <LinearGradient
                   colors={[colors.secondary.main, colors.secondary.dark]}
-                  start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
                   style={styles.hostCTABtnGradient}
                 >
                   <Text style={styles.hostCTABtnText}>Get In Touch</Text>
@@ -434,12 +456,15 @@ export default function EventsScreen({ navigation }: any) {
               </Text>
               <TouchableOpacity
                 style={styles.hostCTABtn}
-                onPress={() => navigation.navigate("InfoTab", { screen: "Contact" })}
+                onPress={() =>
+                  navigation.navigate("InfoTab", { screen: "Contact" })
+                }
                 activeOpacity={0.85}
               >
                 <LinearGradient
                   colors={[colors.secondary.main, colors.secondary.dark]}
-                  start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
                   style={styles.hostCTABtnGradient}
                 >
                   <Text style={styles.hostCTABtnText}>Contact Us</Text>
@@ -457,7 +482,7 @@ export default function EventsScreen({ navigation }: any) {
         onClose={() => setShowModal(false)}
       />
 
-      <SocialFAB />
+      <FloatingCallButton />
     </View>
   );
 }

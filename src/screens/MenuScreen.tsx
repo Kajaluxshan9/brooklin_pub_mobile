@@ -31,8 +31,9 @@ import { getImageUrl } from "../services/api";
 import type { PrimaryCategory, MenuCategory, MenuItem } from "../types/api.types";
 import { ErrorView } from "../components/common";
 import { MenuItemSkeleton } from "../components/common/SkeletonLoader";
-import SocialFAB from "../components/common/SocialFAB";
+import FloatingCallButton from "../components/common/FloatingCallButton";
 import { useHaptics } from "../hooks/useHaptics";
+import { useScrollBottomPadding } from "../config/layout";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -299,6 +300,7 @@ const CategorySection = React.memo(
 
 export default function MenuScreen({ navigation, route }: any) {
   const insets = useSafeAreaInsets();
+  const scrollBottomPad = useScrollBottomPadding();
   const { width: screenWidth } = useWindowDimensions();
   const { selection, light } = useHaptics();
   const isTablet = screenWidth >= 600;
@@ -508,7 +510,7 @@ export default function MenuScreen({ navigation, route }: any) {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={[
           styles.contentInner,
-          { paddingBottom: insets.bottom + 100 },
+          { paddingBottom: scrollBottomPad },
         ]}
         refreshControl={
           <RefreshControl
@@ -567,7 +569,7 @@ export default function MenuScreen({ navigation, route }: any) {
         onClose={() => setShowItemModal(false)}
       />
 
-      <SocialFAB />
+      <FloatingCallButton />
     </View>
   );
 }

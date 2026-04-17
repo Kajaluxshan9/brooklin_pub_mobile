@@ -2,9 +2,9 @@ import React from "react";
 import { TouchableOpacity, StyleSheet, Linking } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { colors, spacing, shadows } from "../../config/theme";
 import { CONTACT_INFO } from "../../config/constants";
+import { useTabBarTopOffset } from "../../config/layout";
 
 /**
  * Floating phone-call FAB — renders in the bottom-right corner of the screen.
@@ -12,11 +12,11 @@ import { CONTACT_INFO } from "../../config/constants";
  * Contact, and Menu pages.
  */
 export default function FloatingCallButton() {
-  const insets = useSafeAreaInsets();
+  const fabBottom = useTabBarTopOffset() + spacing.sm;
 
   return (
     <TouchableOpacity
-      style={[styles.fab, { bottom: insets.bottom + 80 }]}
+      style={[styles.fab, { bottom: fabBottom }]}
       onPress={() => Linking.openURL(`tel:${CONTACT_INFO.PHONE_RAW}`)}
       activeOpacity={0.8}
     >

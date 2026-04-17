@@ -6,7 +6,6 @@ import {
   StyleSheet,
   Animated,
   Linking,
-  Platform,
   useWindowDimensions,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
@@ -16,10 +15,7 @@ import * as Haptics from "expo-haptics";
 import { colors, typography, spacing, borderRadius, shadows } from "../../config/theme";
 import { CONTACT_INFO, EXTERNAL_URLS } from "../../config/constants";
 import { useShare } from "../../hooks/useShare";
-
-// Height of the floating tab bar (used to offset FAB above it)
-const TAB_BAR_HEIGHT = 68;
-const TAB_BAR_BOTTOM_OFFSET = Platform.OS === "ios" ? 22 : 14;
+import { useTabBarTopOffset } from "../../config/layout";
 
 interface SocialAction {
   icon: keyof typeof Ionicons.glyphMap;
@@ -40,7 +36,7 @@ export default function SocialFAB() {
   const { shareRestaurant } = useShare();
 
   // Available vertical space above FAB before hitting safe area top
-  const fabBottom = insets.bottom + TAB_BAR_HEIGHT + TAB_BAR_BOTTOM_OFFSET + spacing.sm;
+  const fabBottom = useTabBarTopOffset() + spacing.sm;
   const availableUpwardSpace = screenHeight - fabBottom - insets.top - 80;
   // Cap item stride so actions never go behind status bar
   const actionStride = Math.min(64, availableUpwardSpace / (5 + 0.5));
@@ -102,6 +98,15 @@ export default function SocialFAB() {
 
   return (
     <View style={[styles.container, { bottom: fabBottom }]} pointerEvents="box-none">
+      {/* Backdrop */}
+      {isOpen && (
+        <TouchableOpacity
+          style={styles.backdrop}
+          onPress={toggle}
+          activeOpacity={1}
+        />
+      )}
+
       {/* Action items */}
       {ACTIONS.map((action, index) => {
         const itemTranslateY = animation.interpolate({
@@ -151,22 +156,15 @@ export default function SocialFAB() {
       <TouchableOpacity onPress={toggle} activeOpacity={0.85} style={styles.fabWrap}>
         <LinearGradient
           colors={[colors.secondary.main, colors.secondary.dark]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
           style={styles.fab}
         >
           <Animated.View style={{ transform: [{ rotate: rotation }] }}>
-            <Ionicons name="add" size={26} color={colors.primary.dark} />
+            <Ionicons name={isOpen ? "close" : "ellipsis-horizontal"} size={24} color={colors.primary.dark} />
           </Animated.View>
         </LinearGradient>
       </TouchableOpacity>
-
-      {/* Backdrop */}
-      {isOpen && (
-        <TouchableOpacity
-          style={styles.backdrop}
-          onPress={toggle}
-          activeOpacity={1}
-        />
-      )}
     </View>
   );
 }
@@ -174,25 +172,36 @@ export default function SocialFAB() {
 const styles = StyleSheet.create({
   container: {
     position: "absolute",
-    right: spacing.base,
+    right: spacing.lg,
     alignItems: "flex-end",
     zIndex: 100,
   },
   backdrop: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "transparent",
+    position: "absolute",
+    top: -1000,
+    left: -1000,
+    right: -1000,
+    bottom: -1000,
+    backgroundColor: "rgba(0,0,0,0.25)",
     zIndex: -1,
   },
   fabWrap: {
     zIndex: 2,
+    borderRadius: 30,
+    shadowColor: "#8B6914",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 8,
+    elevation: 10,
   },
   fab: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    width: 58,
+    height: 58,
+    borderRadius: 29,
     justifyContent: "center",
     alignItems: "center",
-    ...shadows.gold,
+    borderWidth: 1.5,
+    borderColor: "rgba(255,255,255,0.3)",
   },
   actionItem: {
     position: "absolute",
@@ -202,15 +211,19 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   actionButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 46,
+    height: 46,
+    borderRadius: 23,
     justifyContent: "center",
     alignItems: "center",
-    ...shadows.md,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 6,
   },
   actionLabel: {
-    backgroundColor: colors.background.card,
+    backgroundColor: colors.background.paper,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.xs,
     borderRadius: borderRadius.full,

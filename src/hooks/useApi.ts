@@ -130,6 +130,8 @@ export function useApiWithCache<T>(
   const [error, setError] = useState<string | null>(null);
   const [isValidating, setIsValidating] = useState<boolean>(false);
   const mountedRef = useRef(true);
+  const fetchFnRef = useRef(fetchFn);
+  fetchFnRef.current = fetchFn;
 
   const fetchData = useCallback(
     async (isBackground = false) => {
@@ -156,7 +158,7 @@ export function useApiWithCache<T>(
         }
         setError(null);
 
-        const promise = fetchFn();
+        const promise = fetchFnRef.current();
         pendingRequests.set(key, promise);
 
         const result = await promise;
@@ -178,7 +180,7 @@ export function useApiWithCache<T>(
         }
       }
     },
-    [key, fetchFn],
+    [key],
   );
 
   const revalidateIfStale = useCallback(() => {

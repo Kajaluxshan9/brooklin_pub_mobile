@@ -15,7 +15,6 @@ import {
   Animated,
   RefreshControl,
   useWindowDimensions,
-  FlatList,
   ImageBackground,
   Modal,
   Pressable,
@@ -42,6 +41,7 @@ import { GoldDivider } from "../components/common";
 import { EventCardSkeleton, SpecialCardSkeleton } from "../components/common/SkeletonLoader";
 import { useHaptics } from "../hooks/useHaptics";
 import NewsletterForm from "../components/common/NewsletterForm";
+import { useScrollBottomPadding } from "../config/layout";
 
 // ─── Hero images ────────────────────────────────────────────────────────────
 const HERO_IMAGES = [
@@ -497,8 +497,7 @@ export default function HomeScreen({ navigation }: any) {
   const insets = useSafeAreaInsets();
   const { width: screenWidth } = useWindowDimensions();
   const { light } = useHaptics();
-  const isTablet = screenWidth >= 600;
-
+  const scrollBottomPad = useScrollBottomPadding();
   const [refreshing, setRefreshing] = useState(false);
   const [heroIndex, setHeroIndex] = useState(0);
   const heroFade = useRef(new Animated.Value(1)).current;
@@ -593,7 +592,7 @@ export default function HomeScreen({ navigation }: any) {
         style={styles.scroll}
         contentContainerStyle={[
           styles.scrollContent,
-          { paddingBottom: insets.bottom + 100 },
+          { paddingBottom: scrollBottomPad },
         ]}
         showsVerticalScrollIndicator={false}
         refreshControl={
@@ -607,7 +606,9 @@ export default function HomeScreen({ navigation }: any) {
       >
         {/* ── Hero ── */}
         <View style={[styles.heroContainer, { height: heroHeight }]}>
-          <Animated.View style={[StyleSheet.absoluteFillObject, { opacity: heroFade }]}>
+          <Animated.View
+            style={[StyleSheet.absoluteFillObject, { opacity: heroFade }]}
+          >
             <Image
               source={HERO_IMAGES[heroIndex]}
               style={StyleSheet.absoluteFillObject}
@@ -618,21 +619,37 @@ export default function HomeScreen({ navigation }: any) {
 
           {/* Dark gradient overlay */}
           <LinearGradient
-            colors={["rgba(26,13,10,0.1)", "rgba(26,13,10,0.35)", "rgba(26,13,10,0.75)"]}
+            colors={[
+              "rgba(26,13,10,0.1)",
+              "rgba(26,13,10,0.35)",
+              "rgba(26,13,10,0.75)",
+            ]}
             style={StyleSheet.absoluteFillObject}
           />
 
           {/* Top safe area + status */}
-          <View style={[styles.heroTop, { paddingTop: insets.top + spacing.sm }]}>
+          <View
+            style={[styles.heroTop, { paddingTop: insets.top + spacing.sm }]}
+          >
             <View style={styles.heroStatusRow}>
-              <View style={[
-                styles.statusPill,
-                openStatus?.isOpen ? styles.statusPillOpen : styles.statusPillClosed,
-              ]}>
-                <View style={[
-                  styles.statusDot,
-                  { backgroundColor: openStatus?.isOpen ? "#22C55E" : "#EF4444" },
-                ]} />
+              <View
+                style={[
+                  styles.statusPill,
+                  openStatus?.isOpen
+                    ? styles.statusPillOpen
+                    : styles.statusPillClosed,
+                ]}
+              >
+                <View
+                  style={[
+                    styles.statusDot,
+                    {
+                      backgroundColor: openStatus?.isOpen
+                        ? "#22C55E"
+                        : "#EF4444",
+                    },
+                  ]}
+                />
                 <Text style={styles.statusPillText}>
                   {openStatus?.isOpen ? "Open Now" : "Closed"}
                 </Text>
@@ -643,9 +660,7 @@ export default function HomeScreen({ navigation }: any) {
           {/* Hero content bottom */}
           <View style={styles.heroBottom}>
             <Text style={styles.heroBrandName}>Brooklin Pub</Text>
-            <Text style={styles.heroTagline}>
-              & Grill · Whitby, ON
-            </Text>
+            <Text style={styles.heroTagline}>& Grill · Whitby, ON</Text>
 
             {/* Hero CTA */}
             <View style={styles.heroCTAs}>
@@ -663,7 +678,11 @@ export default function HomeScreen({ navigation }: any) {
                   end={{ x: 1, y: 0 }}
                   style={styles.heroCTAPrimaryGradient}
                 >
-                  <Ionicons name="bag-handle-outline" size={16} color="#1A0D0A" />
+                  <Ionicons
+                    name="bag-handle-outline"
+                    size={16}
+                    color="#1A0D0A"
+                  />
                   <Text style={styles.heroCTAPrimaryText}>Order Online</Text>
                 </LinearGradient>
               </TouchableOpacity>
@@ -734,7 +753,11 @@ export default function HomeScreen({ navigation }: any) {
                 onPress={() => navigation.navigate("SpecialTab")}
               >
                 <Text style={styles.sectionSeeAllText}>See All</Text>
-                <Ionicons name="chevron-forward" size={14} color={colors.secondary.main} />
+                <Ionicons
+                  name="chevron-forward"
+                  size={14}
+                  color={colors.secondary.main}
+                />
               </TouchableOpacity>
             </View>
 
@@ -745,16 +768,23 @@ export default function HomeScreen({ navigation }: any) {
             >
               {specialsLoading ? (
                 <>
-                  <View style={{ width: SPECIAL_CARD_W, marginRight: spacing.md }}>
+                  <View
+                    style={{ width: SPECIAL_CARD_W, marginRight: spacing.md }}
+                  >
                     <SpecialCardSkeleton />
                   </View>
-                  <View style={{ width: SPECIAL_CARD_W, marginRight: spacing.md }}>
+                  <View
+                    style={{ width: SPECIAL_CARD_W, marginRight: spacing.md }}
+                  >
                     <SpecialCardSkeleton />
                   </View>
                 </>
               ) : (
                 dailySpecials.slice(0, 6).map((special) => (
-                  <View key={special.id} style={{ width: SPECIAL_CARD_W, marginRight: spacing.md }}>
+                  <View
+                    key={special.id}
+                    style={{ width: SPECIAL_CARD_W, marginRight: spacing.md }}
+                  >
                     <SpecialPreviewCard
                       special={special}
                       onPress={() => {
@@ -769,7 +799,9 @@ export default function HomeScreen({ navigation }: any) {
           </View>
         )}
 
-        <View style={styles.sectionDivider}><GoldDivider /></View>
+        <View style={styles.sectionDivider}>
+          <GoldDivider />
+        </View>
 
         {/* ── Upcoming Events ── */}
         <View style={styles.section}>
@@ -783,7 +815,11 @@ export default function HomeScreen({ navigation }: any) {
               onPress={() => navigation.navigate("EventsTab")}
             >
               <Text style={styles.sectionSeeAllText}>See All</Text>
-              <Ionicons name="chevron-forward" size={14} color={colors.secondary.main} />
+              <Ionicons
+                name="chevron-forward"
+                size={14}
+                color={colors.secondary.main}
+              />
             </TouchableOpacity>
           </View>
 
@@ -794,7 +830,11 @@ export default function HomeScreen({ navigation }: any) {
             </>
           ) : displayableEvents.length === 0 ? (
             <View style={styles.emptyEvents}>
-              <Ionicons name="calendar-outline" size={36} color={colors.border.gold} />
+              <Ionicons
+                name="calendar-outline"
+                size={36}
+                color={colors.border.gold}
+              />
               <Text style={styles.emptyEventsTitle}>No Upcoming Events</Text>
               <Text style={styles.emptyEventsDesc}>
                 Check back soon — we're always planning something special.
@@ -814,7 +854,9 @@ export default function HomeScreen({ navigation }: any) {
           )}
         </View>
 
-        <View style={styles.sectionDivider}><GoldDivider /></View>
+        <View style={styles.sectionDivider}>
+          <GoldDivider />
+        </View>
 
         {/* ── Visit Us ── */}
         <View style={styles.section}>
@@ -826,7 +868,9 @@ export default function HomeScreen({ navigation }: any) {
             <View style={styles.visitContent}>
               <Text style={styles.visitOverline}>Find Us</Text>
               <Text style={styles.visitTitle}>Come Visit</Text>
-              <Text style={styles.visitAddress}>{CONTACT_INFO.ADDRESS.FULL}</Text>
+              <Text style={styles.visitAddress}>
+                {CONTACT_INFO.ADDRESS.FULL}
+              </Text>
 
               <View style={styles.visitActions}>
                 <TouchableOpacity
@@ -847,18 +891,28 @@ export default function HomeScreen({ navigation }: any) {
 
                 <TouchableOpacity
                   style={styles.visitBtnOutline}
-                  onPress={() => Linking.openURL(`tel:${CONTACT_INFO.PHONE_RAW}`)}
+                  onPress={() =>
+                    Linking.openURL(`tel:${CONTACT_INFO.PHONE_RAW}`)
+                  }
                   activeOpacity={0.8}
                 >
-                  <Ionicons name="call-outline" size={14} color={colors.secondary.main} />
-                  <Text style={styles.visitBtnOutlineText}>{CONTACT_INFO.PHONE}</Text>
+                  <Ionicons
+                    name="call-outline"
+                    size={14}
+                    color={colors.secondary.main}
+                  />
+                  <Text style={styles.visitBtnOutlineText}>
+                    {CONTACT_INFO.PHONE}
+                  </Text>
                 </TouchableOpacity>
               </View>
             </View>
           </View>
         </View>
 
-        <View style={styles.sectionDivider}><GoldDivider /></View>
+        <View style={styles.sectionDivider}>
+          <GoldDivider />
+        </View>
 
         {/* ── Newsletter ── */}
         <View style={styles.section}>
@@ -870,9 +924,18 @@ export default function HomeScreen({ navigation }: any) {
           <Text style={styles.socialStripLabel}>Follow Us</Text>
           <View style={styles.socialIcons}>
             {[
-              { icon: "logo-facebook" as const, url: EXTERNAL_URLS.SOCIAL.FACEBOOK },
-              { icon: "logo-instagram" as const, url: EXTERNAL_URLS.SOCIAL.INSTAGRAM },
-              { icon: "logo-tiktok" as const, url: EXTERNAL_URLS.SOCIAL.TIKTOK },
+              {
+                icon: "logo-facebook" as const,
+                url: EXTERNAL_URLS.SOCIAL.FACEBOOK,
+              },
+              {
+                icon: "logo-instagram" as const,
+                url: EXTERNAL_URLS.SOCIAL.INSTAGRAM,
+              },
+              {
+                icon: "logo-tiktok" as const,
+                url: EXTERNAL_URLS.SOCIAL.TIKTOK,
+              },
             ].map(({ icon, url }) => (
               <TouchableOpacity
                 key={icon}

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { StatusBar } from "expo-status-bar";
+import * as ScreenOrientation from "expo-screen-orientation";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import * as SplashScreen from "expo-splash-screen";
@@ -42,6 +43,11 @@ export default function App() {
   });
 
   useEffect(() => {
+    // Unlock orientation so it follows the device's auto-rotate setting
+    ScreenOrientation.unlockAsync().catch(() => {});
+  }, []);
+
+  useEffect(() => {
     if (fontsLoaded) {
       // Small delay for splash experience, then hide splash screen
       const timer = setTimeout(() => {
@@ -61,7 +67,11 @@ export default function App() {
       <GestureHandlerRootView style={{ flex: 1 }}>
         <SafeAreaProvider>
           <ToastProvider>
-            <StatusBar style="dark" backgroundColor="#FDF8F3" />
+            <StatusBar
+              style="light"
+              translucent
+              backgroundColor="transparent"
+            />
             <AppNavigator />
             <OfflineBanner />
           </ToastProvider>

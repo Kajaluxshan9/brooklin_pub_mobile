@@ -3,9 +3,10 @@
     "name": "Brooklin Pub",
     "slug": "brooklin-pub",
     "version": "1.0.0",
-    "orientation": "portrait",
-    "icon": "./assets/brooklinpub-logo.png",
+    "orientation": "default",
+    "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
+    "newArchEnabled": true,
     "splash": {
       "image": "./assets/brooklinpub-logo.png",
       "resizeMode": "contain",
@@ -13,7 +14,14 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.brooklinpub.app"
+      "bundleIdentifier": "com.brooklinpub.app",
+      "buildNumber": "1",
+      "infoPlist": {
+        "NSCameraUsageDescription": "This app does not use the camera.",
+        "NSPhotoLibraryUsageDescription": "This app does not access your photo library.",
+        "NSMicrophoneUsageDescription": "This app does not use the microphone.",
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -21,15 +29,20 @@
         "foregroundImage": "./assets/brooklinpub-logo.png"
       },
       "package": "com.brooklinpub.app",
+      "versionCode": 1,
       "predictiveBackGestureEnabled": false
     },
     "web": {
       "favicon": "./assets/brooklinpub-logo.png"
     },
-    "plugins": [
-      "expo-font",
-      "expo-web-browser"
-    ],
+    "updates": {
+      "enabled": false,
+      "checkAutomatically": "NEVER"
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "plugins": ["expo-font", "expo-web-browser", "expo-screen-orientation"],
     "extra": {
       "eas": {
         "projectId": "d586045d-f51f-42ce-a2c2-2d71b002cb0d"

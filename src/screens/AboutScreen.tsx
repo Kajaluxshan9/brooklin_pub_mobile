@@ -26,9 +26,10 @@ import { storiesService } from "../services/stories.service";
 import { getImageUrl } from "../services/api";
 import type { StoryCategory } from "../types/api.types";
 import { ErrorView } from "../components/common";
-import SocialFAB from "../components/common/SocialFAB";
+import FloatingCallButton from "../components/common/FloatingCallButton";
 import { CONTACT_INFO, EXTERNAL_URLS } from "../config/constants";
 import { Linking } from "react-native";
+import { useScrollBottomPadding } from "../config/layout";
 
 // ─── Fallback story slides ────────────────────────────────────────────────────
 
@@ -137,6 +138,7 @@ const StoryCarousel = ({
 
 export default function AboutScreen({ navigation }: any) {
   const insets = useSafeAreaInsets();
+  const scrollBottomPad = useScrollBottomPadding();
   const { width: screenWidth } = useWindowDimensions();
   const [refreshing, setRefreshing] = useState(false);
 
@@ -181,7 +183,7 @@ export default function AboutScreen({ navigation }: any) {
     <View style={[styles.root, { paddingTop: insets.top }]}>
       <ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
+        contentContainerStyle={{ paddingBottom: scrollBottomPad }}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -194,7 +196,9 @@ export default function AboutScreen({ navigation }: any) {
         {/* ── Header ── */}
         <View style={styles.header}>
           <Text style={styles.headerTitle}>About Us</Text>
-          <Text style={styles.headerSubtitle}>Brooklin Pub & Grill since 2014</Text>
+          <Text style={styles.headerSubtitle}>
+            Brooklin Pub & Grill since 2014
+          </Text>
         </View>
 
         {/* ── Story Carousel ── */}
@@ -204,7 +208,11 @@ export default function AboutScreen({ navigation }: any) {
         <View style={styles.factsRow}>
           {[
             { icon: "calendar" as const, label: "Since", value: "2014" },
-            { icon: "location" as const, label: "Location", value: "Whitby, ON" },
+            {
+              icon: "location" as const,
+              label: "Location",
+              value: "Whitby, ON",
+            },
             { icon: "people" as const, label: "Community", value: "First" },
           ].map(({ icon, label, value }) => (
             <View key={label} style={styles.factItem}>
@@ -222,14 +230,16 @@ export default function AboutScreen({ navigation }: any) {
           <Text style={styles.sectionOverline}>Our Philosophy</Text>
           <Text style={styles.sectionTitle}>More Than a Meal</Text>
           <Text style={styles.body}>
-            At Brooklin Pub & Grill, we believe great food is just the beginning. Since opening
-            our doors in 2014, we've been a cornerstone of the Brooklin community — a place where
-            neighbours become friends and every visit feels like coming home.
+            At Brooklin Pub & Grill, we believe great food is just the
+            beginning. Since opening our doors in 2014, we've been a cornerstone
+            of the Brooklin community — a place where neighbours become friends
+            and every visit feels like coming home.
           </Text>
           <Text style={[styles.body, { marginTop: spacing.base }]}>
-            We craft our menu with fresh, locally sourced ingredients and a passion for bold
-            flavours. Whether you're here for a quick lunch, a family dinner, or a late-night
-            celebration, we make every moment count.
+            We craft our menu with fresh, locally sourced ingredients and a
+            passion for bold flavours. Whether you're here for a quick lunch, a
+            family dinner, or a late-night celebration, we make every moment
+            count.
           </Text>
         </View>
 
@@ -243,7 +253,10 @@ export default function AboutScreen({ navigation }: any) {
               <Image
                 key={i}
                 source={img}
-                style={[styles.galleryThumb, { width: galleryThumbSize, height: galleryThumbSize }]}
+                style={[
+                  styles.galleryThumb,
+                  { width: galleryThumbSize, height: galleryThumbSize },
+                ]}
                 contentFit="cover"
                 transition={300}
               />
@@ -268,7 +281,8 @@ export default function AboutScreen({ navigation }: any) {
               >
                 <LinearGradient
                   colors={[colors.secondary.main, colors.secondary.dark]}
-                  start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
                   style={styles.ctaBtnGradient}
                 >
                   <Ionicons name="navigate" size={14} color="#1A0D0A" />
@@ -281,7 +295,11 @@ export default function AboutScreen({ navigation }: any) {
                 onPress={() => navigation.navigate("Contact")}
                 activeOpacity={0.85}
               >
-                <Ionicons name="mail-outline" size={14} color={colors.secondary.main} />
+                <Ionicons
+                  name="mail-outline"
+                  size={14}
+                  color={colors.secondary.main}
+                />
                 <Text style={styles.ctaBtnSecondaryText}>Contact Us</Text>
               </TouchableOpacity>
             </View>
@@ -289,7 +307,7 @@ export default function AboutScreen({ navigation }: any) {
         </View>
       </ScrollView>
 
-      <SocialFAB />
+      <FloatingCallButton />
     </View>
   );
 }

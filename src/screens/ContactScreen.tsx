@@ -30,7 +30,8 @@ import {
   SUBJECT_OPTIONS,
 } from "../config/constants";
 import { colors, typography, spacing, borderRadius, shadows } from "../config/theme";
-import SocialFAB from "../components/common/SocialFAB";
+import FloatingCallButton from "../components/common/FloatingCallButton";
+import { useScrollBottomPadding } from "../config/layout";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -131,6 +132,7 @@ const Field = ({
 
 export default function ContactScreen() {
   const insets = useSafeAreaInsets();
+  const scrollBottomPad = useScrollBottomPadding();
   const scrollRef = useRef<ScrollView>(null);
 
   const [formData, setFormData] = useState<ContactFormData>({
@@ -242,12 +244,16 @@ export default function ContactScreen() {
       <ScrollView
         ref={scrollRef}
         style={[styles.root, { paddingTop: insets.top }]}
-        contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
+        contentContainerStyle={{ paddingBottom: scrollBottomPad }}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh}
-            tintColor={colors.secondary.main} colors={[colors.secondary.main]} />
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={colors.secondary.main}
+            colors={[colors.secondary.main]}
+          />
         }
       >
         {/* ── Header ── */}
@@ -258,20 +264,30 @@ export default function ContactScreen() {
 
         {/* ── Quick Contact ── */}
         <View style={styles.quickContactRow}>
-          <TouchableOpacity style={styles.quickContactBtn}
-            onPress={() => Linking.openURL(`tel:${CONTACT_INFO.PHONE_RAW}`)} activeOpacity={0.8}>
+          <TouchableOpacity
+            style={styles.quickContactBtn}
+            onPress={() => Linking.openURL(`tel:${CONTACT_INFO.PHONE_RAW}`)}
+            activeOpacity={0.8}
+          >
             <View style={styles.quickContactIcon}>
               <Ionicons name="call" size={20} color={colors.primary.main} />
             </View>
             <Text style={styles.quickContactText}>{CONTACT_INFO.PHONE}</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.quickContactBtn}
-            onPress={() => Linking.openURL(`mailto:${CONTACT_INFO.EMAIL_GENERAL}`)} activeOpacity={0.8}>
+          <TouchableOpacity
+            style={styles.quickContactBtn}
+            onPress={() =>
+              Linking.openURL(`mailto:${CONTACT_INFO.EMAIL_GENERAL}`)
+            }
+            activeOpacity={0.8}
+          >
             <View style={styles.quickContactIcon}>
               <Ionicons name="mail" size={20} color={colors.primary.main} />
             </View>
-            <Text style={styles.quickContactText}>{CONTACT_INFO.EMAIL_GENERAL}</Text>
+            <Text style={styles.quickContactText}>
+              {CONTACT_INFO.EMAIL_GENERAL}
+            </Text>
           </TouchableOpacity>
         </View>
 
@@ -282,7 +298,10 @@ export default function ContactScreen() {
 
           {submitted ? (
             <View style={styles.successCard}>
-              <LinearGradient colors={["rgba(34,197,94,0.12)", "rgba(34,197,94,0.06)"]} style={StyleSheet.absoluteFillObject} />
+              <LinearGradient
+                colors={["rgba(34,197,94,0.12)", "rgba(34,197,94,0.06)"]}
+                style={StyleSheet.absoluteFillObject}
+              />
               <View style={styles.successIconWrap}>
                 <Ionicons name="checkmark-circle" size={40} color="#22C55E" />
               </View>
@@ -293,85 +312,195 @@ export default function ContactScreen() {
             </View>
           ) : (
             <View style={styles.form}>
-              <Field label="Full Name" value={formData.name} onChangeText={(v) => setField("name", v)}
-                placeholder="Your name" error={errors.name} required icon="person-outline" />
-              <Field label="Email" value={formData.email} onChangeText={(v) => setField("email", v)}
-                placeholder="your@email.com" error={errors.email} required icon="mail-outline"
-                keyboardType="email-address" />
-              <Field label="Phone" value={formData.phone ?? ""} onChangeText={(v) => setField("phone", v)}
-                placeholder="(optional)" icon="call-outline" keyboardType="phone-pad" />
+              <Field
+                label="Full Name"
+                value={formData.name}
+                onChangeText={(v) => setField("name", v)}
+                placeholder="Your name"
+                error={errors.name}
+                required
+                icon="person-outline"
+              />
+              <Field
+                label="Email"
+                value={formData.email}
+                onChangeText={(v) => setField("email", v)}
+                placeholder="your@email.com"
+                error={errors.email}
+                required
+                icon="mail-outline"
+                keyboardType="email-address"
+              />
+              <Field
+                label="Phone"
+                value={formData.phone ?? ""}
+                onChangeText={(v) => setField("phone", v)}
+                placeholder="(optional)"
+                icon="call-outline"
+                keyboardType="phone-pad"
+              />
 
               {/* Subject picker */}
               <View style={styles.fieldWrap}>
-                <Text style={styles.fieldLabel}>Subject <Text style={styles.required}>*</Text></Text>
+                <Text style={styles.fieldLabel}>
+                  Subject <Text style={styles.required}>*</Text>
+                </Text>
                 <TouchableOpacity
-                  style={[styles.fieldInput, errors.subject ? styles.fieldInputError : null]}
-                  onPress={() => setShowSubjectPicker(true)} activeOpacity={0.8}
+                  style={[
+                    styles.fieldInput,
+                    errors.subject ? styles.fieldInputError : null,
+                  ]}
+                  onPress={() => setShowSubjectPicker(true)}
+                  activeOpacity={0.8}
                 >
-                  <Ionicons name="list-outline" size={16} color={errors.subject ? colors.error : colors.text.muted} style={styles.fieldIcon} />
-                  <Text style={[styles.fieldTextInput, !selectedSubjectLabel && { color: colors.text.muted }]}>
+                  <Ionicons
+                    name="list-outline"
+                    size={16}
+                    color={errors.subject ? colors.error : colors.text.muted}
+                    style={styles.fieldIcon}
+                  />
+                  <Text
+                    style={[
+                      styles.fieldTextInput,
+                      !selectedSubjectLabel && { color: colors.text.muted },
+                    ]}
+                  >
                     {selectedSubjectLabel || "Select a subject…"}
                   </Text>
-                  <Ionicons name="chevron-down" size={16} color={colors.text.muted} />
+                  <Ionicons
+                    name="chevron-down"
+                    size={16}
+                    color={colors.text.muted}
+                  />
                 </TouchableOpacity>
-                {errors.subject ? <Text style={styles.fieldError}>{errors.subject}</Text> : null}
+                {errors.subject ? (
+                  <Text style={styles.fieldError}>{errors.subject}</Text>
+                ) : null}
               </View>
 
               {/* Conditional reservation fields */}
               {isReservation && (
                 <>
-                  <Field label="Date" value={formData.reservationDate ?? ""} onChangeText={(v) => setField("reservationDate", v)}
-                    placeholder="e.g. Saturday, March 29" error={errors.reservationDate} required icon="calendar-outline" />
-                  <Field label="Time" value={formData.reservationTime ?? ""} onChangeText={(v) => setField("reservationTime", v)}
-                    placeholder="e.g. 7:00 PM" error={errors.reservationTime} required icon="time-outline" />
-                  <Field label="Number of Guests" value={formData.guestCount?.toString() ?? ""}
-                    onChangeText={(v) => setField("guestCount", v ? parseInt(v, 10) : undefined)}
-                    placeholder="e.g. 8" icon="people-outline" keyboardType="number-pad" />
+                  <Field
+                    label="Date"
+                    value={formData.reservationDate ?? ""}
+                    onChangeText={(v) => setField("reservationDate", v)}
+                    placeholder="e.g. Saturday, March 29"
+                    error={errors.reservationDate}
+                    required
+                    icon="calendar-outline"
+                  />
+                  <Field
+                    label="Time"
+                    value={formData.reservationTime ?? ""}
+                    onChangeText={(v) => setField("reservationTime", v)}
+                    placeholder="e.g. 7:00 PM"
+                    error={errors.reservationTime}
+                    required
+                    icon="time-outline"
+                  />
+                  <Field
+                    label="Number of Guests"
+                    value={formData.guestCount?.toString() ?? ""}
+                    onChangeText={(v) =>
+                      setField("guestCount", v ? parseInt(v, 10) : undefined)
+                    }
+                    placeholder="e.g. 8"
+                    icon="people-outline"
+                    keyboardType="number-pad"
+                  />
                 </>
               )}
 
               {/* Conditional careers fields */}
               {isCareers && (
                 <>
-                  <Field label="Position of Interest" value={formData.position ?? ""} onChangeText={(v) => setField("position", v)}
-                    placeholder="e.g. Server, Cook…" icon="briefcase-outline" />
+                  <Field
+                    label="Position of Interest"
+                    value={formData.position ?? ""}
+                    onChangeText={(v) => setField("position", v)}
+                    placeholder="e.g. Server, Cook…"
+                    icon="briefcase-outline"
+                  />
                   <View style={styles.fieldWrap}>
-                    <Text style={styles.fieldLabel}>Attach CV <Text style={styles.optional}>(optional)</Text></Text>
-                    <TouchableOpacity style={[styles.fieldInput, errors.cvFile ? styles.fieldInputError : null]}
-                      onPress={pickDocument} activeOpacity={0.8}>
-                      <Ionicons name={cvFile ? "document-attach" : "cloud-upload-outline"} size={16}
-                        color={errors.cvFile ? colors.error : colors.text.muted} style={styles.fieldIcon} />
-                      <Text style={[styles.fieldTextInput, !cvFile && { color: colors.text.muted }]}>
+                    <Text style={styles.fieldLabel}>
+                      Attach CV <Text style={styles.optional}>(optional)</Text>
+                    </Text>
+                    <TouchableOpacity
+                      style={[
+                        styles.fieldInput,
+                        errors.cvFile ? styles.fieldInputError : null,
+                      ]}
+                      onPress={pickDocument}
+                      activeOpacity={0.8}
+                    >
+                      <Ionicons
+                        name={
+                          cvFile ? "document-attach" : "cloud-upload-outline"
+                        }
+                        size={16}
+                        color={errors.cvFile ? colors.error : colors.text.muted}
+                        style={styles.fieldIcon}
+                      />
+                      <Text
+                        style={[
+                          styles.fieldTextInput,
+                          !cvFile && { color: colors.text.muted },
+                        ]}
+                      >
                         {cvFile ? cvFile.name : "Upload PDF or Word doc…"}
                       </Text>
                       {cvFile && (
-                        <TouchableOpacity onPress={() => setCvFile(null)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
-                          <Ionicons name="close-circle" size={16} color={colors.text.muted} />
+                        <TouchableOpacity
+                          onPress={() => setCvFile(null)}
+                          hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                        >
+                          <Ionicons
+                            name="close-circle"
+                            size={16}
+                            color={colors.text.muted}
+                          />
                         </TouchableOpacity>
                       )}
                     </TouchableOpacity>
-                    {errors.cvFile ? <Text style={styles.fieldError}>{errors.cvFile}</Text> : null}
+                    {errors.cvFile ? (
+                      <Text style={styles.fieldError}>{errors.cvFile}</Text>
+                    ) : null}
                   </View>
                 </>
               )}
 
-              <Field label="Message" value={formData.message} onChangeText={(v) => setField("message", v)}
-                placeholder="Tell us how we can help…" error={errors.message} required
-                multiline lines={5} />
+              <Field
+                label="Message"
+                value={formData.message}
+                onChangeText={(v) => setField("message", v)}
+                placeholder="Tell us how we can help…"
+                error={errors.message}
+                required
+                multiline
+                lines={5}
+              />
 
-              <TouchableOpacity style={styles.submitBtn} onPress={handleSubmit} disabled={loading} activeOpacity={0.85}>
+              <TouchableOpacity
+                style={styles.submitBtn}
+                onPress={handleSubmit}
+                disabled={loading}
+                activeOpacity={0.85}
+              >
                 <LinearGradient
                   colors={[colors.primary.main, colors.primary.dark]}
-                  start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
                   style={styles.submitBtnGradient}
                 >
-                  {loading
-                    ? <ActivityIndicator color="#FFFDFB" size="small" />
-                    : <>
-                        <Ionicons name="send" size={16} color="#FFFDFB" />
-                        <Text style={styles.submitBtnText}>Send Message</Text>
-                      </>
-                  }
+                  {loading ? (
+                    <ActivityIndicator color="#FFFDFB" size="small" />
+                  ) : (
+                    <>
+                      <Ionicons name="send" size={16} color="#FFFDFB" />
+                      <Text style={styles.submitBtnText}>Send Message</Text>
+                    </>
+                  )}
                 </LinearGradient>
               </TouchableOpacity>
             </View>
@@ -385,9 +514,20 @@ export default function ContactScreen() {
 
           <View style={styles.hoursCard}>
             {displayHours.map(({ days, time }, i) => (
-              <View key={i} style={[styles.hoursRow, i < displayHours.length - 1 && styles.hoursRowBorder]}>
+              <View
+                key={i}
+                style={[
+                  styles.hoursRow,
+                  i < displayHours.length - 1 && styles.hoursRowBorder,
+                ]}
+              >
                 <Text style={styles.hoursDays}>{days}</Text>
-                <Text style={[styles.hoursTime, time === "Closed" && styles.hoursTimeClosed]}>
+                <Text
+                  style={[
+                    styles.hoursTime,
+                    time === "Closed" && styles.hoursTimeClosed,
+                  ]}
+                >
                   {time}
                 </Text>
               </View>
@@ -403,21 +543,32 @@ export default function ContactScreen() {
           <View style={styles.addressCard}>
             <View style={styles.addressRow}>
               <View style={styles.addressIcon}>
-                <Ionicons name="location" size={20} color={colors.secondary.main} />
+                <Ionicons
+                  name="location"
+                  size={20}
+                  color={colors.secondary.main}
+                />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={styles.addressText}>{CONTACT_INFO.ADDRESS.STREET}</Text>
                 <Text style={styles.addressText}>
-                  {CONTACT_INFO.ADDRESS.CITY}, {CONTACT_INFO.ADDRESS.PROVINCE} {CONTACT_INFO.ADDRESS.POSTAL}
+                  {CONTACT_INFO.ADDRESS.STREET}
+                </Text>
+                <Text style={styles.addressText}>
+                  {CONTACT_INFO.ADDRESS.CITY}, {CONTACT_INFO.ADDRESS.PROVINCE}{" "}
+                  {CONTACT_INFO.ADDRESS.POSTAL}
                 </Text>
               </View>
             </View>
 
-            <TouchableOpacity style={styles.directionsBtn}
-              onPress={() => Linking.openURL(EXTERNAL_URLS.GOOGLE_MAPS)} activeOpacity={0.85}>
+            <TouchableOpacity
+              style={styles.directionsBtn}
+              onPress={() => Linking.openURL(EXTERNAL_URLS.GOOGLE_MAPS)}
+              activeOpacity={0.85}
+            >
               <LinearGradient
                 colors={[colors.secondary.main, colors.secondary.dark]}
-                start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
                 style={styles.directionsBtnGradient}
               >
                 <Ionicons name="navigate" size={14} color="#1A0D0A" />
@@ -432,41 +583,78 @@ export default function ContactScreen() {
           <View style={styles.eventsContactCard}>
             <Ionicons name="calendar" size={20} color={colors.secondary.main} />
             <View style={{ flex: 1 }}>
-              <Text style={styles.eventsContactTitle}>Private Events & Bookings</Text>
-              <Text style={styles.eventsContactEmail}>{CONTACT_INFO.EMAIL_EVENTS}</Text>
+              <Text style={styles.eventsContactTitle}>
+                Private Events & Bookings
+              </Text>
+              <Text style={styles.eventsContactEmail}>
+                {CONTACT_INFO.EMAIL_EVENTS}
+              </Text>
             </View>
             <TouchableOpacity
               style={styles.emailBtn}
-              onPress={() => Linking.openURL(`mailto:${CONTACT_INFO.EMAIL_EVENTS}`)}
+              onPress={() =>
+                Linking.openURL(`mailto:${CONTACT_INFO.EMAIL_EVENTS}`)
+              }
               activeOpacity={0.8}
             >
-              <Ionicons name="arrow-forward" size={16} color={colors.primary.main} />
+              <Ionicons
+                name="arrow-forward"
+                size={16}
+                color={colors.primary.main}
+              />
             </TouchableOpacity>
           </View>
         </View>
       </ScrollView>
 
       {/* ── Subject Picker Modal ── */}
-      <Modal visible={showSubjectPicker} transparent animationType="slide" onRequestClose={() => setShowSubjectPicker(false)}>
-        <Pressable style={styles.pickerOverlay} onPress={() => setShowSubjectPicker(false)}>
-          <Pressable style={[styles.pickerSheet, { paddingBottom: insets.bottom + spacing.base }]} onPress={() => {}}>
+      <Modal
+        visible={showSubjectPicker}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowSubjectPicker(false)}
+      >
+        <Pressable
+          style={styles.pickerOverlay}
+          onPress={() => setShowSubjectPicker(false)}
+        >
+          <Pressable
+            style={[
+              styles.pickerSheet,
+              { paddingBottom: insets.bottom + spacing.base },
+            ]}
+            onPress={() => {}}
+          >
             <View style={styles.pickerHandle} />
             <Text style={styles.pickerTitle}>Select Subject</Text>
             {SUBJECT_OPTIONS.map((opt) => (
               <TouchableOpacity
                 key={opt.value}
-                style={[styles.pickerOption, formData.subject === opt.value && styles.pickerOptionActive]}
+                style={[
+                  styles.pickerOption,
+                  formData.subject === opt.value && styles.pickerOptionActive,
+                ]}
                 onPress={() => {
                   setField("subject", opt.value);
                   setShowSubjectPicker(false);
                 }}
                 activeOpacity={0.75}
               >
-                <Text style={[styles.pickerOptionText, formData.subject === opt.value && styles.pickerOptionTextActive]}>
+                <Text
+                  style={[
+                    styles.pickerOptionText,
+                    formData.subject === opt.value &&
+                      styles.pickerOptionTextActive,
+                  ]}
+                >
                   {opt.label}
                 </Text>
                 {formData.subject === opt.value && (
-                  <Ionicons name="checkmark" size={18} color={colors.secondary.main} />
+                  <Ionicons
+                    name="checkmark"
+                    size={18}
+                    color={colors.secondary.main}
+                  />
                 )}
               </TouchableOpacity>
             ))}
@@ -474,7 +662,7 @@ export default function ContactScreen() {
         </Pressable>
       </Modal>
 
-      <SocialFAB />
+      <FloatingCallButton />
     </KeyboardAvoidingView>
   );
 }

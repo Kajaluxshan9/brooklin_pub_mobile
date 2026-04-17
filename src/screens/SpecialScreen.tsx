@@ -30,8 +30,9 @@ import { getImageUrl } from "../services/api";
 import type { Special } from "../types/api.types";
 import { ErrorView } from "../components/common";
 import { SpecialCardSkeleton } from "../components/common/SkeletonLoader";
-import SocialFAB from "../components/common/SocialFAB";
+import FloatingCallButton from "../components/common/FloatingCallButton";
 import { useShare } from "../hooks/useShare";
+import { useScrollBottomPadding } from "../config/layout";
 
 // ─── Types / Config ───────────────────────────────────────────────────────────
 
@@ -192,6 +193,7 @@ const SpecialCard = React.memo(({
 
 export default function SpecialScreen({ route, navigation }: any) {
   const insets = useSafeAreaInsets();
+  const scrollBottomPad = useScrollBottomPadding();
   const { width: screenWidth } = useWindowDimensions();
   const { shareSpecial } = useShare();
 
@@ -245,7 +247,9 @@ export default function SpecialScreen({ route, navigation }: any) {
       {/* ── Header ── */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Specials</Text>
-        <Text style={styles.headerSubtitle}>Handcrafted deals crafted for you</Text>
+        <Text style={styles.headerSubtitle}>
+          Handcrafted deals crafted for you
+        </Text>
       </View>
 
       {/* ── Category Tabs ── */}
@@ -270,8 +274,15 @@ export default function SpecialScreen({ route, navigation }: any) {
                 {tab.label}
               </Text>
               {count > 0 && (
-                <View style={[styles.tabCount, active && styles.tabCountActive]}>
-                  <Text style={[styles.tabCountText, active && styles.tabCountTextActive]}>
+                <View
+                  style={[styles.tabCount, active && styles.tabCountActive]}
+                >
+                  <Text
+                    style={[
+                      styles.tabCountText,
+                      active && styles.tabCountTextActive,
+                    ]}
+                  >
                     {count}
                   </Text>
                 </View>
@@ -284,7 +295,10 @@ export default function SpecialScreen({ route, navigation }: any) {
       {/* ── Content ── */}
       <ScrollView
         style={styles.scroll}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 100 }]}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: scrollBottomPad },
+        ]}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
@@ -297,25 +311,46 @@ export default function SpecialScreen({ route, navigation }: any) {
       >
         {/* Tab description header */}
         <View style={styles.tabHeroRow}>
-          <View style={[styles.tabHeroIcon, { backgroundColor: "rgba(217,167,86,0.12)" }]}>
-            <Ionicons name={activeTabConfig.icon} size={24} color={colors.secondary.main} />
+          <View
+            style={[
+              styles.tabHeroIcon,
+              { backgroundColor: "rgba(217,167,86,0.12)" },
+            ]}
+          >
+            <Ionicons
+              name={activeTabConfig.icon}
+              size={24}
+              color={colors.secondary.main}
+            />
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={styles.tabHeroTitle}>{activeTabConfig.label} Specials</Text>
+            <Text style={styles.tabHeroTitle}>
+              {activeTabConfig.label} Specials
+            </Text>
             {filteredSpecials.length > 0 && (
-              <Text style={styles.tabHeroCount}>{filteredSpecials.length} available</Text>
+              <Text style={styles.tabHeroCount}>
+                {filteredSpecials.length} available
+              </Text>
             )}
           </View>
         </View>
 
         {loading ? (
           <View style={styles.skeletonWrap}>
-            {[1, 2, 3].map((i) => <SpecialCardSkeleton key={i} />)}
+            {[1, 2, 3].map((i) => (
+              <SpecialCardSkeleton key={i} />
+            ))}
           </View>
         ) : filteredSpecials.length === 0 ? (
           <View style={styles.emptyState}>
-            <Ionicons name={activeTabConfig.icon} size={48} color={colors.border.gold} />
-            <Text style={styles.emptyTitle}>No {activeTabConfig.label} Specials</Text>
+            <Ionicons
+              name={activeTabConfig.icon}
+              size={48}
+              color={colors.border.gold}
+            />
+            <Text style={styles.emptyTitle}>
+              No {activeTabConfig.label} Specials
+            </Text>
             <Text style={styles.emptyDesc}>
               Check back soon — we update our specials regularly.
             </Text>
@@ -347,7 +382,7 @@ export default function SpecialScreen({ route, navigation }: any) {
         }}
       />
 
-      <SocialFAB />
+      <FloatingCallButton />
     </View>
   );
 }
