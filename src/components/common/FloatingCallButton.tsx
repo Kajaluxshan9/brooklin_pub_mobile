@@ -12,7 +12,7 @@ import { useTabBarTopOffset } from "../../config/layout";
  * Contact, and Menu pages.
  */
 export default function FloatingCallButton() {
-  const fabBottom = useTabBarTopOffset() + spacing.sm;
+  const fabBottom = useTabBarTopOffset() - spacing["2xl"];
 
   return (
     <TouchableOpacity

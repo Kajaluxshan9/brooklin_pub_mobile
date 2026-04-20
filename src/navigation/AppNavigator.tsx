@@ -1,5 +1,5 @@
 import React from "react";
-import { StyleSheet, View, useWindowDimensions } from "react-native";
+import { Platform, StyleSheet, View, useWindowDimensions } from "react-native";
 import { NavigationContainer } from "@react-navigation/native";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
@@ -165,7 +165,7 @@ const AppNavigator = () => {
           tabBarLabelStyle: [styles.tabBarLabel, { fontSize: labelSize }],
           tabBarStyle: {
             ...styles.tabBar,
-            bottom: 0,
+            bottom: Platform.OS === 'ios' ? -30 : 0,
             left: 0,
             right: 0,
             height: tabBarHeight + paddingBottom,
