@@ -13,7 +13,7 @@ import { useNavigation } from "@react-navigation/native";
 import { colors, typography, spacing, borderRadius } from "../config/theme";
 import { useScrollBottomPadding } from "../config/layout";
 
-const LAST_UPDATED = "March 29, 2025";
+const LAST_UPDATED = "October 4, 2026";
 const CONTACT_EMAIL = "brooklinpub@gmail.com";
 const BUSINESS_ADDRESS = "15 Baldwin St, Whitby, ON L1M 1A2";
 const BUSINESS_PHONE = "(905) 425-3055";
@@ -133,7 +133,29 @@ export default function TermsScreen() {
           details directly with us before attending.
         </Para>
 
-        <SectionTitle title="8. Changes to These Terms" />
+        <SectionTitle title="8. Gift Cards" />
+        <Para>
+          Brooklin Pub gift cards can be purchased by Interac e-Transfer or bank
+          deposit. An order is activated only after we verify that the payment
+          has been received. If the amount we receive differs from the amount
+          requested, the gift card is issued for the amount actually received
+          and the buyer is notified.
+        </Para>
+        <Para>
+          Each gift card has a unique Gift Card ID and a 4-digit PIN, emailed to
+          the recipient once approved. Keep them private; anyone with both can
+          use the balance. After five incorrect PIN attempts within ten minutes
+          the card is locked until you contact us.
+        </Para>
+        <Para>
+          In accordance with Ontario's Consumer Protection Act, our gift cards do
+          not expire and carry no fees. They are redeemable for food and
+          beverages at Brooklin Pub over multiple visits and are not redeemable
+          for cash except where required by law. For any enquiry, call{" "}
+          {BUSINESS_PHONE} or use our Contact Us form and quote your Gift Card ID.
+        </Para>
+
+        <SectionTitle title="9. Changes to These Terms" />
         <Para>
           We may update these Terms from time to time. We will notify you of any
           changes by posting the updated Terms on our website. Continued use of
@@ -141,7 +163,7 @@ export default function TermsScreen() {
           the revised Terms.
         </Para>
 
-        <SectionTitle title="9. Contact Us" />
+        <SectionTitle title="10. Contact Us" />
         <View style={styles.contactCard}>
           <Text style={styles.contactCardTitle}>Brooklin Pub & Grill</Text>
           <Text style={styles.contactCardText}>{BUSINESS_ADDRESS}</Text>

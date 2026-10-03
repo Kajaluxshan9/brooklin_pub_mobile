@@ -2,7 +2,7 @@
   "expo": {
     "name": "Brooklin Pub",
     "slug": "brooklin-pub",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "default",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -18,7 +18,7 @@
       "buildNumber": "1",
       "infoPlist": {
         "NSCameraUsageDescription": "This app does not use the camera.",
-        "NSPhotoLibraryUsageDescription": "This app does not access your photo library.",
+        "NSPhotoLibraryUsageDescription": "Brooklin Pub uses your photo library only when you choose a payment screenshot to upload for a gift card purchase.",
         "NSMicrophoneUsageDescription": "This app does not use the microphone.",
         "ITSAppUsesNonExemptEncryption": false
       }
@@ -42,7 +42,19 @@
     "runtimeVersion": {
       "policy": "appVersion"
     },
-    "plugins": ["expo-font", "expo-web-browser", "expo-screen-orientation"],
+    "plugins": [
+      "expo-font",
+      "expo-web-browser",
+      "expo-screen-orientation",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Brooklin Pub uses your photo library only when you choose a payment screenshot to upload for a gift card purchase.",
+          "cameraPermission": false,
+          "microphonePermission": false
+        }
+      ]
+    ],
     "extra": {
       "eas": {
         "projectId": "d586045d-f51f-42ce-a2c2-2d71b002cb0d"

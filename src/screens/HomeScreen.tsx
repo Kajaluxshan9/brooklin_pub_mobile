@@ -740,6 +740,25 @@ export default function HomeScreen({ navigation }: any) {
           />
         </View>
 
+        {/* ── Gift cards ── */}
+        <TouchableOpacity
+          style={styles.giftBanner}
+          activeOpacity={0.85}
+          onPress={() => {
+            light();
+            navigation.navigate("InfoTab", { screen: "GiftCards" });
+          }}
+          accessibilityRole="button"
+          accessibilityLabel="Buy a gift card"
+        >
+          <Ionicons name="gift-outline" size={26} color={colors.secondary.main} />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.giftBannerTitle}>Gift Cards</Text>
+            <Text style={styles.giftBannerText}>Give the gift of Brooklin · never expires</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={18} color={colors.secondary.main} />
+        </TouchableOpacity>
+
         {/* ── Today's Specials ── */}
         {(specialsLoading || dailySpecials.length > 0) && (
           <View style={styles.section}>
@@ -1124,6 +1143,30 @@ const styles = StyleSheet.create({
     height: 40,
     backgroundColor: colors.border.light,
     alignSelf: "center",
+  },
+
+  // ── Gift card banner
+  giftBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    marginHorizontal: spacing.base,
+    marginTop: spacing.base,
+    padding: spacing.base,
+    borderRadius: borderRadius.lg,
+    backgroundColor: colors.primary.dark,
+    borderWidth: 1,
+    borderColor: colors.border.gold,
+  },
+  giftBannerTitle: {
+    fontFamily: typography.fontFamily.heading,
+    fontSize: 20,
+    color: colors.text.light,
+  },
+  giftBannerText: {
+    fontFamily: typography.fontFamily.body,
+    fontSize: typography.fontSize.sm,
+    color: colors.text.lightMuted,
   },
 
   // ── Sections

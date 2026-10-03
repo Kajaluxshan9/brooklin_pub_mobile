@@ -15,6 +15,8 @@ import ContactScreen from "../screens/ContactScreen";
 import SpecialScreen from "../screens/SpecialScreen";
 import PrivacyPolicyScreen from "../screens/PrivacyPolicyScreen";
 import TermsScreen from "../screens/TermsScreen";
+import GiftCardsScreen from "../screens/GiftCardsScreen";
+import GiftCardCheckScreen from "../screens/GiftCardCheckScreen";
 
 import { colors, typography } from "../config/theme";
 
@@ -42,6 +44,8 @@ export type InfoStackParamList = {
   Contact: undefined;
   PrivacyPolicy: undefined;
   Terms: undefined;
+  GiftCards: undefined;
+  GiftCardCheck: undefined;
 };
 
 // ─── Stack Navigators ────────────────────────────────────────────────────────
@@ -85,6 +89,8 @@ const InfoStackNavigator = () => (
     <InfoStack.Screen name="Contact" component={ContactScreen} />
     <InfoStack.Screen name="PrivacyPolicy" component={PrivacyPolicyScreen} />
     <InfoStack.Screen name="Terms" component={TermsScreen} />
+    <InfoStack.Screen name="GiftCards" component={GiftCardsScreen} />
+    <InfoStack.Screen name="GiftCardCheck" component={GiftCardCheckScreen} />
   </InfoStack.Navigator>
 );
 

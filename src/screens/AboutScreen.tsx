@@ -302,6 +302,15 @@ export default function AboutScreen({ navigation }: any) {
                 />
                 <Text style={styles.ctaBtnSecondaryText}>Contact Us</Text>
               </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.ctaBtnSecondary}
+                onPress={() => navigation.navigate("GiftCards")}
+                activeOpacity={0.85}
+              >
+                <Ionicons name="gift-outline" size={14} color={colors.secondary.main} />
+                <Text style={styles.ctaBtnSecondaryText}>Gift Cards</Text>
+              </TouchableOpacity>
             </View>
           </View>
         </View>
