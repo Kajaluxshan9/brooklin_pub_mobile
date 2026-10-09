@@ -243,7 +243,7 @@ export default function Footer({ openStatus: externalStatus }: FooterProps) {
             <TouchableOpacity
               onPress={() =>
                 openLink(
-                  "https://brooklinpub.com/menu/Main%20Menu%20-%20Brooklin%20Pub.pdf",
+                  "https://brooklinpub.com/menu-pdfs/Main%20Menu%20-%20Brooklin%20Pub.pdf",
                 )
               }
               style={styles.menuDownloadBtn}
@@ -253,7 +253,7 @@ export default function Footer({ openStatus: externalStatus }: FooterProps) {
             <TouchableOpacity
               onPress={() =>
                 openLink(
-                  "https://brooklinpub.com/menu/Drinks%20Menu%20-%20Brooklin%20Pub.pdf",
+                  "https://brooklinpub.com/menu-pdfs/Drinks%20Menu%20-%20Brooklin%20Pub.pdf",
                 )
               }
               style={styles.menuDownloadBtn}
