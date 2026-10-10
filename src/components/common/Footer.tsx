@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { getTorontoNow, WEEKDAYS } from "../../utils/torontoTime";
 import {
   View,
   Text,
@@ -50,21 +51,10 @@ const formatTime12 = (time: string) => {
 
 const getOpenClosedStatus = (hours: OpeningHours[]): boolean => {
   try {
-    const now = new Date();
-    const torontoNow = new Date(
-      now.toLocaleString("en-US", { timeZone: "America/Toronto" }),
-    );
-    const days = [
-      "sunday",
-      "monday",
-      "tuesday",
-      "wednesday",
-      "thursday",
-      "friday",
-      "saturday",
-    ];
-    const todayKey = days[torontoNow.getDay()];
-    const currentMinutes = torontoNow.getHours() * 60 + torontoNow.getMinutes();
+    const torontoNow = getTorontoNow();
+    const days = WEEKDAYS;
+    const todayKey = torontoNow.dayKey;
+    const currentMinutes = torontoNow.minutesOfDay;
 
     const todayHours = hours.find(
       (h) => h.dayOfWeek?.toLowerCase() === todayKey && h.isOpen && h.isActive,
@@ -82,7 +72,7 @@ const getOpenClosedStatus = (hours: OpeningHours[]): boolean => {
       }
     }
 
-    const prevDayIndex = (torontoNow.getDay() + 6) % 7;
+    const prevDayIndex = (torontoNow.dayIndex + 6) % 7;
     const prevDayKey = days[prevDayIndex];
     const prevHours = hours.find(
       (h) =>
@@ -142,20 +132,7 @@ export default function Footer({ openStatus: externalStatus }: FooterProps) {
 
   const todayKey = (() => {
     try {
-      const now = new Date();
-      const torontoNow = new Date(
-        now.toLocaleString("en-US", { timeZone: "America/Toronto" }),
-      );
-      const days = [
-        "sunday",
-        "monday",
-        "tuesday",
-        "wednesday",
-        "thursday",
-        "friday",
-        "saturday",
-      ];
-      return days[torontoNow.getDay()];
+      return getTorontoNow().dayKey;
     } catch {
       return "";
     }
